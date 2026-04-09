@@ -1,0 +1,28 @@
+const visitedCountries = [
+  'USA',
+  'MEX',
+  'BRA',
+  'COL',
+  'CHL',
+  'ARG',
+  'ESP',
+  'SLV',
+  'GTM',
+  'CAN',
+  'PAN',
+  'GBR',
+  'IRL',
+  'CHE',
+  'NLD',
+  'GRC',
+  'ITA',
+  'MAR',
+  'ZAF',
+  'CHN',
+  'JPN',
+  'KOR',
+  'ISL',
+  'AUS',
+]
+
+export default visitedCountries
