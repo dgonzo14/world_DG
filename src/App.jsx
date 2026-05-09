@@ -24,9 +24,9 @@ function App() {
           <div className="globe-panel__header">
             <div>
               <p className="section-eyebrow">Interactive Map</p>
-              <h2 id="travel-globe-title">Explore where you&apos;ve been</h2>
+              <h2 id="travel-globe-title">Explore Where I&apos;ve Been</h2>
               <p className="section-copy">
-                Drag, zoom, and hover across country polygons to see your travel
+                Drag, zoom, and hover across country polygons to see my travel
                 footprint.
               </p>
             </div>
@@ -38,7 +38,7 @@ function App() {
       </main>
 
       <footer className="site-footer">
-        Built with React and react-globe.gl
+        Created by Diego Gonzalez with React and react-globe.gl
       </footer>
     </div>
   )

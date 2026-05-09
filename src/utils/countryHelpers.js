@@ -1,18 +1,18 @@
-const ISO3_FIELDS = [
+const COUNTRY_CODE_FIELDS = [
   'ISO_A3',
-  'ADM0_A3',
   'iso_a3',
   'ISO3166-1-Alpha-3',
-  'WB_A3',
-  'BRK_A3',
-  'GU_A3',
-  'SOV_A3',
+  'ADM0_A3',
+  'adm0_a3',
+  'a3',
 ]
 
 const COUNTRY_NAME_FIELDS = [
   'ADMIN',
+  'admin',
   'NAME',
   'name',
+  'name_long',
   'NAME_EN',
   'FORMAL_EN',
   'BRK_NAME',
@@ -63,21 +63,23 @@ export function normalizeCountryCode(value) {
   return /^[A-Z]{3}$/.test(normalizedCode) ? normalizedCode : null
 }
 
-export function getCountryIso3(feature) {
-  const code = findStringValue(getSearchSources(feature), ISO3_FIELDS)
+export function getCountryCode(feature) {
+  const code = findStringValue(getSearchSources(feature), COUNTRY_CODE_FIELDS)
   return normalizeCountryCode(code)
 }
+
+export const getCountryIso3 = getCountryCode
 
 export function getCountryName(feature) {
   return (
     findStringValue(getSearchSources(feature), COUNTRY_NAME_FIELDS) ??
-    getCountryIso3(feature) ??
+    getCountryCode(feature) ??
     'Unknown country'
   )
 }
 
 export function isVisited(feature, visitedCountryLookup) {
-  const countryCode = getCountryIso3(feature)
+  const countryCode = getCountryCode(feature)
 
   if (!countryCode) {
     return false

@@ -16,7 +16,7 @@
   --accent: #2dd4bf;
   --accent-bright: #5eead4;
   --neutral-country: #475569;
-  --shadow: 0 24px 80px rgba(2, 8, 23, 0.5);
+  --shadow: 0 24px 80px rgba(2, 8, 23, 0.48);
 }
 
 * {
@@ -51,14 +51,14 @@ a {
 
 .app-shell {
   min-height: 100vh;
-  padding: 32px 20px 28px;
+  padding: 40px 20px 28px;
 }
 
 .page-shell {
   width: min(1160px, 100%);
   margin: 0 auto;
   display: grid;
-  gap: 24px;
+  gap: 26px;
 }
 
 .hero-card,
@@ -83,71 +83,102 @@ a {
 }
 
 .hero-card {
-  padding: 28px;
+  padding: 38px;
 }
 
 .hero-layout {
   position: relative;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  align-items: center;
+  gap: 34px;
 }
 
 .hero-copy {
-  max-width: 640px;
+  max-width: 760px;
 }
 
 .hero-eyebrow,
 .section-eyebrow {
   margin: 0 0 10px;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
   font-size: 0.74rem;
+  font-weight: 700;
   color: var(--accent);
 }
 
 .hero-copy h1 {
   margin: 0;
-  font-size: clamp(2.5rem, 6vw, 4.6rem);
-  line-height: 0.96;
-  letter-spacing: -0.05em;
+  font-size: 5rem;
+  line-height: 1;
+  letter-spacing: 0;
 }
 
 .hero-copy p {
-  margin: 16px 0 0;
-  max-width: 58ch;
-  font-size: 1rem;
+  margin: 18px 0 0;
+  max-width: 62ch;
+  font-size: 1.08rem;
+  line-height: 1.7;
   color: var(--muted);
 }
 
 .hero-stat {
-  min-width: 190px;
-  padding: 18px 20px;
-  border-radius: 22px;
-  border: 1px solid rgba(45, 212, 191, 0.18);
-  background: linear-gradient(180deg, rgba(20, 28, 45, 0.9), rgba(10, 15, 28, 0.82));
+  position: relative;
+  display: grid;
+  align-content: center;
+  min-height: 220px;
+  padding: 30px 28px 28px;
+  border-radius: 24px;
+  border: 1px solid rgba(45, 212, 191, 0.24);
+  background:
+    linear-gradient(180deg, rgba(20, 29, 46, 0.94), rgba(8, 13, 25, 0.9)),
+    rgba(8, 13, 25, 0.9);
+  box-shadow: inset 0 1px 0 rgba(248, 250, 252, 0.06);
+}
+
+.hero-stat::before {
+  content: '';
+  position: absolute;
+  top: 20px;
+  left: 28px;
+  width: 84px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), transparent);
 }
 
 .hero-stat__label {
   display: block;
-  font-size: 0.85rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+  word-spacing: 0.26em;
   color: var(--muted);
 }
 
 .hero-stat__value {
   display: block;
-  margin-top: 6px;
-  font-size: clamp(2rem, 5vw, 3rem);
+  margin-top: 12px;
+  font-size: 5.75rem;
   line-height: 1;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.hero-stat__progress {
+  display: block;
+  margin-top: 12px;
+  color: var(--accent);
+  font-size: 1rem;
   font-weight: 700;
 }
 
-.hero-stat__caption {
+.hero-stat__updated {
   display: block;
-  margin-top: 8px;
-  color: var(--accent);
-  font-size: 0.92rem;
+  margin-top: 4px;
+  color: rgba(148, 163, 184, 0.74);
+  font-size: 0.82rem;
 }
 
 .globe-panel {
@@ -166,12 +197,14 @@ a {
 
 .globe-panel__header h2 {
   margin: 0;
-  font-size: clamp(1.4rem, 3vw, 2rem);
-  letter-spacing: -0.03em;
+  font-size: 2rem;
+  line-height: 1.14;
+  letter-spacing: 0;
 }
 
 .section-copy {
   margin: 10px 0 0;
+  max-width: 54ch;
   color: var(--muted);
 }
 
@@ -334,7 +367,15 @@ a {
     border-radius: 24px;
   }
 
-  .hero-layout,
+  .hero-layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .hero-copy h1 {
+    font-size: 3.8rem;
+  }
+
   .globe-panel__header {
     flex-direction: column;
     align-items: flex-start;
@@ -342,6 +383,15 @@ a {
 
   .hero-stat {
     width: 100%;
+    min-height: 0;
+  }
+
+  .hero-stat__value {
+    font-size: 4.5rem;
+  }
+
+  .globe-panel__header h2 {
+    font-size: 1.8rem;
   }
 
   .legend {
@@ -358,6 +408,35 @@ a {
   .hero-card,
   .globe-panel {
     padding: 18px;
+  }
+
+  .hero-layout {
+    gap: 20px;
+  }
+
+  .hero-copy h1 {
+    font-size: 2.7rem;
+  }
+
+  .hero-copy p {
+    font-size: 1rem;
+  }
+
+  .hero-stat {
+    padding: 28px 22px 22px;
+    border-radius: 22px;
+  }
+
+  .hero-stat::before {
+    left: 22px;
+  }
+
+  .hero-stat__value {
+    font-size: 3.8rem;
+  }
+
+  .globe-panel__header h2 {
+    font-size: 1.45rem;
   }
 
   .globe-stage,

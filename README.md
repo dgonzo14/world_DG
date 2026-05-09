@@ -30,5 +30,5 @@ app and publishes the generated `dist` folder.
 ## Data notes
 
 - Country polygons are stored at `public/data/countries.geojson`.
-- The current file is the lower-resolution Natural Earth `110m` country GeoJSON, which keeps the globe responsive while preserving country boundaries and ISO metadata.
+- The current file is the lower-resolution Visionscarto World Atlas `110m` countries GeoJSON, derived from Natural Earth and using a Morocco / Western Sahara split that keeps Western Sahara separate from Morocco.
 - Visited countries live in `src/data/visitedCountries.js` as ISO-3 codes so you can expand the list without touching the UI.
