@@ -23,6 +23,7 @@ const visitedCountries = [
   'KOR',
   'ISL',
   'AUS',
+  'PRI',
 ]
 
 export default visitedCountries
