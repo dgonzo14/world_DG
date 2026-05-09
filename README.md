@@ -15,6 +15,18 @@ Build the production bundle with:
 npm.cmd run build
 ```
 
+## Deploy to GitHub Pages
+
+This Vite app is configured for the project page URL:
+
+```text
+https://dgonzo14.github.io/world_DG/
+```
+
+Push to `main`, then in GitHub go to **Settings > Pages** and set **Source** to
+**GitHub Actions**. The workflow in `.github/workflows/deploy.yml` builds the
+app and publishes the generated `dist` folder.
+
 ## Data notes
 
 - Country polygons are stored at `public/data/countries.geojson`.
