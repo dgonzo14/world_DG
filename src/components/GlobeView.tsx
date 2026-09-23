@@ -65,6 +65,7 @@ type Arc = LoopArc | RouteArc | CometArc
 
 interface AirportPoint extends LatLng {
   iata: string
+  name: string
   city: string
   firstFlight: number
   flights: number[]
@@ -212,7 +213,7 @@ export default function GlobeView({
       for (const ap of f.from === f.to ? [f.origin] : [f.origin, f.destination]) {
         let point = byCode.get(ap.iata)
         if (!point) {
-          point = { iata: ap.iata, city: ap.city, lat: ap.lat, lng: ap.lng, firstFlight: f.index, flights: [] }
+          point = { iata: ap.iata, name: ap.name, city: ap.city, lat: ap.lat, lng: ap.lng, firstFlight: f.index, flights: [] }
           byCode.set(ap.iata, point)
         }
         point.flights.push(f.index)
@@ -288,8 +289,8 @@ export default function GlobeView({
       el.classList.toggle('is-connected', isConnected)
       el.classList.toggle('is-dim', Boolean(selectedAirport) && !isSelected && !isConnected)
       el.classList.toggle('is-top', topAirports.has(p.iata))
-      el.querySelector('.ap__count')!.textContent = String(n)
-      el.setAttribute('aria-label', `${p.iata}, ${p.city}: ${n} ${n === 1 ? 'visit' : 'visits'}`)
+      el.querySelector('.ap__count')!.textContent = `${n} ${n === 1 ? 'visit' : 'visits'}`
+      el.setAttribute('aria-label', `${p.iata}, ${p.name}, ${p.city}: ${n} ${n === 1 ? 'visit' : 'visits'}`)
       el.setAttribute('aria-pressed', String(isSelected))
     }
     for (const p of airportPoints) {
@@ -307,11 +308,19 @@ export default function GlobeView({
       el.className = 'ap'
       // The globe is pointer-only; the Flights tab lists every airport for keyboard users.
       el.tabIndex = -1
-      el.innerHTML = `<span class="ap__dot"></span><span class="ap__label"><b>${p.iata}</b><span class="ap__city">${escapeHtml(p.city)}</span><span class="ap__count"></span></span>`
+      // Two separate labels so their visibility rules can't fight: a small code tag
+      // for busy/connected airports, and a full tooltip on hover.
+      el.innerHTML =
+        `<span class="ap__dot"></span>` +
+        `<span class="ap__tag">${p.iata}</span>` +
+        `<span class="ap__tip"><b>${p.iata} · ${escapeHtml(p.city)}</b>` +
+        `<span class="ap__name">${escapeHtml(p.name)}</span><span class="ap__count"></span></span>`
       el.addEventListener('click', (event) => {
         event.stopPropagation()
         onSelectAirportRef.current(p.iata)
       })
+      // Don't let the globe raycast "through" the marker and hover the country below.
+      el.addEventListener('pointermove', (event) => event.stopPropagation())
       elements.current.set(p.iata, el)
     }
     applyRef.current(el, p)

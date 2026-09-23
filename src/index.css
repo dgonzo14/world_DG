@@ -1039,49 +1039,73 @@ kbd {
   box-shadow: 0 0 0 2px rgba(12, 15, 20, 0.85);
   transition: transform 0.15s var(--ease), background-color 0.15s;
 }
-.ap__label {
+.ap__tag,
+.ap__tip {
   position: absolute;
-  left: calc(50% + var(--size) / 2 + 6px);
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 3px 7px;
-  border-radius: 4px;
-  background: rgba(12, 15, 20, 0.82);
   white-space: nowrap;
   pointer-events: none;
-  font: 500 0.68rem/1.2 var(--f-mono);
+}
+/* Compact code tag: busiest airports at rest, plus anything tied to the selection. */
+.ap__tag {
+  display: none;
+  left: calc(50% + var(--size) / 2 + 5px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(12, 15, 20, 0.82);
+  font: 700 0.66rem/1.2 var(--f-mono);
+  letter-spacing: 0.04em;
+  color: var(--paper);
+}
+.ap.is-top .ap__tag,
+.ap.is-connected .ap__tag,
+.ap.is-selected .ap__tag {
+  display: block;
+}
+.ap.is-selected .ap__tag {
+  background: var(--signal);
+  color: var(--ink);
+}
+/* Full tooltip on hover: code, city, airport name, visits. */
+.ap__tip {
+  display: none;
+  left: 50%;
+  bottom: calc(50% + var(--size) / 2 + 8px);
+  transform: translateX(-50%);
+  gap: 3px;
+  padding: 8px 11px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: rgba(26, 31, 40, 0.96);
+  box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.8);
+  text-align: left;
+  font: 500 0.7rem/1.3 var(--f-mono);
+  color: var(--muted);
+}
+.ap__tip b {
+  font: 700 1rem/1.1 var(--f-display);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--paper);
+}
+.ap__name {
+  font: 400 0.8rem/1.3 var(--f-body);
   color: var(--paper-dim);
 }
-.ap__label b {
-  font-weight: 700;
-  color: var(--paper);
-  letter-spacing: 0.04em;
+.ap:hover .ap__tip {
+  display: grid;
 }
-/* Busiest airports show just the code; hover or selection reveals the rest. */
-.ap .ap__city,
-.ap .ap__count {
+.ap:hover .ap__tag {
   display: none;
 }
-.ap:not(.is-top):not(.is-selected):not(.is-connected) .ap__label {
-  display: none;
+.ap:hover {
+  /* The globe sets z-index inline by depth; the hovered marker must win. */
+  z-index: 100000 !important;
 }
-.ap:hover .ap__label,
-.ap:hover .ap__city,
-.ap:hover .ap__count,
-.ap.is-selected .ap__city,
-.ap.is-selected .ap__count {
-  display: inline;
-}
-.ap:hover .ap__label,
-.ap.is-selected .ap__label {
-  display: flex;
-  z-index: 2;
-}
-.ap__count::before {
-  content: '· ';
+/* While an airport is hovered, hide the country tooltip for the land beneath it. */
+.globe-canvas:has(.ap:hover) .float-tooltip-kap {
+  display: none !important;
 }
 .ap:hover .ap__dot {
   transform: scale(1.35);
@@ -1090,13 +1114,6 @@ kbd {
   background: var(--signal);
   transform: scale(1.4);
   box-shadow: 0 0 0 2px rgba(12, 15, 20, 0.9), 0 0 0 5px rgba(255, 196, 37, 0.35);
-}
-.ap.is-selected .ap__label {
-  background: var(--signal);
-  color: rgba(12, 15, 20, 0.75);
-}
-.ap.is-selected .ap__label b {
-  color: var(--ink);
 }
 .ap.is-connected .ap__dot {
   background: #fff3c4;
