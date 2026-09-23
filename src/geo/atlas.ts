@@ -39,6 +39,8 @@ export interface Home extends LatLng {
 
 export interface Country {
   code: string
+  /** ISO 3166-1 alpha-2, for joining airports to countries. */
+  iso2: string | null
   name: string
   nameEs: string
   continent: Continent
@@ -117,6 +119,17 @@ export function featureCode(properties: Record<string, unknown>): string | null 
   return null
 }
 
+// Natural Earth leaves iso_a2 as "-99" for a few countries; wb_a2 covers France but not Norway.
+const ISO2_OVERRIDES: Record<string, string> = { NOR: 'NO', FRA: 'FR' }
+
+export function featureIso2(properties: Record<string, unknown>, code: string): string | null {
+  for (const field of ['iso_a2', 'wb_a2', 'ISO_A2']) {
+    const value = properties[field]
+    if (typeof value === 'string' && /^[A-Z]{2}$/.test(value)) return value
+  }
+  return ISO2_OVERRIDES[code] ?? null
+}
+
 function stringField(properties: Record<string, unknown>, fields: string[]): string | null {
   for (const field of fields) {
     const value = properties[field]
@@ -157,6 +170,7 @@ export function buildAtlas(collection: FeatureCollection, visitedCodes: string[]
     const center = labelPoint(feature.geometry)
     const country: Country = {
       code,
+      iso2: featureIso2(feature.properties, code),
       name: stringField(feature.properties, NAME_FIELDS) ?? code,
       nameEs: stringField(feature.properties, ['name_es']) ?? '',
       continent: toContinent(feature.properties.continent),

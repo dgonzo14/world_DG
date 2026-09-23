@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import visitedCountries from '../data/visitedCountries'
 import { HOME } from '../data/home'
-import { buildAtlas, featureCode, type FeatureCollection } from './atlas'
+import { buildAtlas, featureCode, featureIso2, type FeatureCollection } from './atlas'
 
 // Integration tests run against the real dataset that ships with the site.
 const collection = JSON.parse(
@@ -18,6 +18,15 @@ describe('featureCode', () => {
 
   it('rejects malformed codes', () => {
     expect(featureCode({ iso_a3: 'US', adm0_a3: 42 })).toBeNull()
+  })
+})
+
+describe('featureIso2', () => {
+  it('uses iso_a2, then wb_a2, then overrides', () => {
+    expect(featureIso2({ iso_a2: 'JP' }, 'JPN')).toBe('JP')
+    expect(featureIso2({ iso_a2: '-99', wb_a2: 'FR' }, 'FRA')).toBe('FR')
+    expect(featureIso2({ iso_a2: '-99', wb_a2: '-99' }, 'NOR')).toBe('NO')
+    expect(featureIso2({ iso_a2: '-99' }, 'KOS')).toBeNull()
   })
 })
 
