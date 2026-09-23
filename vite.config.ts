@@ -3,8 +3,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
-export default defineConfig(({ command }) => ({
-  base: command === 'build' ? '/world_DG/' : '/',
+export default defineConfig(({ command, isPreview }) => ({
+  // GitHub Pages serves the project under /world_DG/; `vite preview` must match the build.
+  base: command === 'build' || isPreview ? '/world_DG/' : '/',
   plugins: [react()],
   define: {
     __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
