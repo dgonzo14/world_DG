@@ -4,10 +4,18 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Travel Globe</title>
+    <meta name="theme-color" content="#0c0f14" />
+    <title>DG Atlas · 29 countries, one round trip</title>
+    <meta
+      name="description"
+      content="Diego Gonzalez's travel atlas: an interactive 3D globe of every country I've visited, with a 2-opt optimized round-trip route and stats computed from spherical geometry."
+    />
+    <meta property="og:title" content="DG Atlas · Diego Gonzalez" />
+    <meta property="og:description" content="Every country I've visited on a 3D globe, with an optimized round-trip route." />
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <noscript>This interactive atlas needs JavaScript.</noscript>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
