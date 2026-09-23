@@ -4,6 +4,7 @@ import CountryCard from './components/CountryCard'
 import CountryList from './components/CountryList'
 import EnginePanel, { REPO_URL } from './components/EnginePanel'
 import FlightsPanel from './components/FlightsPanel'
+import GlobeErrorBoundary from './components/GlobeErrorBoundary'
 import StatsPanel from './components/StatsPanel'
 import type { CameraTarget, Mode } from './components/GlobeView'
 import { HOME } from './data/home'
@@ -302,26 +303,28 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
         <div className="globe-canvas" ref={globeRef}>
           {webgl ? (
             globeSize.width > 0 && (
-              <Suspense fallback={<div className="loader"><span className="loader__orb" aria-hidden="true" />Loading 3D globe…</div>}>
-                <GlobeView
-                  atlas={atlas}
-                  network={network}
-                  flightLog={flightLog}
-                  mode={inFlights ? 'flights' : 'loop'}
-                  width={globeSize.width}
-                  height={globeSize.height}
-                  selected={selected}
-                  selectedAirport={selectedAirport}
-                  activeLeg={activeLeg}
-                  replayIndex={replay?.index ?? null}
-                  showArcs={showArcs}
-                  autoRotate={!selected && !selectedAirport && !tour}
-                  reducedMotion={reducedMotion}
-                  camera={camera}
-                  onSelect={(next) => select(next)}
-                  onSelectAirport={(iata) => selectAirport(iata)}
-                />
-              </Suspense>
+              <GlobeErrorBoundary>
+                <Suspense fallback={<div className="loader"><span className="loader__orb" aria-hidden="true" />Loading 3D globe…</div>}>
+                  <GlobeView
+                    atlas={atlas}
+                    network={network}
+                    flightLog={flightLog}
+                    mode={inFlights ? 'flights' : 'loop'}
+                    width={globeSize.width}
+                    height={globeSize.height}
+                    selected={selected}
+                    selectedAirport={selectedAirport}
+                    activeLeg={activeLeg}
+                    replayIndex={replay?.index ?? null}
+                    showArcs={showArcs}
+                    autoRotate={!selected && !selectedAirport && !tour}
+                    reducedMotion={reducedMotion}
+                    camera={camera}
+                    onSelect={(next) => select(next)}
+                    onSelectAirport={(iata) => selectAirport(iata)}
+                  />
+                </Suspense>
+              </GlobeErrorBoundary>
             )
           ) : (
             <div className="loader">

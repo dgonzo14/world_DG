@@ -235,6 +235,10 @@ kbd {
   position: absolute;
   inset: 0;
 }
+.globe-boundary {
+  position: absolute;
+  inset: 0;
+}
 .globe-canvas canvas {
   outline: none;
 }
