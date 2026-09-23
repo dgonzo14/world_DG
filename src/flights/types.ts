@@ -37,3 +37,14 @@ export interface FlightEntry {
   /** Actual minus scheduled gate arrival; negative is early. */
   arrDelayMin: number | null
 }
+
+/**
+ * public/data/flights.public.json: where I've flown, not how often or when.
+ * Routes are unique airport pairs in alphabetical order, so even their order
+ * carries no frequency information. The detailed log is encrypted separately.
+ */
+export interface PublicFlightsFile {
+  version: 1
+  airports: Record<string, AirportRef>
+  routes: [string, string][]
+}
