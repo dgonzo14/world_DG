@@ -1,15 +1,20 @@
+import type { FlightLog } from '../flights/log'
 import type { Atlas, Country } from '../geo/atlas'
 import { formatCompact, formatKm, formatKm2, formatLatLng, pad2 } from '../lib/format'
 
 interface Props {
   atlas: Atlas
   country: Country
+  flightLog: FlightLog | null
   onPrev: () => void
   onNext: () => void
   onClose: () => void
 }
 
-export default function CountryCard({ atlas, country, onPrev, onNext, onClose }: Props) {
+export default function CountryCard({ atlas, country, flightLog, onPrev, onNext, onClose }: Props) {
+  // Join airports to the country by ISO alpha-2.
+  const airports = flightLog?.airports.filter((a) => a.item.country === country.iso2) ?? []
+  const airportVisits = airports.reduce((acc, a) => acc + a.count, 0)
   const total = atlas.totals.visited
   const previous = country.stop ? (country.stop === 1 ? null : atlas.visited[country.stop - 2]) : null
   const legKm = country.stop ? atlas.route.legs[country.stop - 1]?.km : null
@@ -49,6 +54,21 @@ export default function CountryCard({ atlas, country, onPrev, onNext, onClose }:
           <dt>Center</dt>
           <dd>{formatLatLng(country.center.lat, country.center.lng)}</dd>
         </div>
+        {airports.length > 0 && (
+          <div className="card__wide">
+            <dt>
+              Airports · {airportVisits} {airportVisits === 1 ? 'visit' : 'visits'}
+            </dt>
+            <dd className="card__airports">
+              {airports.slice(0, 6).map((a) => (
+                <span key={a.item.iata} title={`${a.item.name}, ${a.item.city}`}>
+                  {a.item.iata} <small>{a.count}</small>
+                </span>
+              ))}
+              {airports.length > 6 && <span>+{airports.length - 6}</span>}
+            </dd>
+          </div>
+        )}
         {legKm != null && (
           <div className="card__wide">
             <dt>Route leg</dt>

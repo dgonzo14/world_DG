@@ -1,4 +1,5 @@
 import type { Atlas } from '../geo/atlas'
+import type { FlightsState } from '../hooks/useFlights'
 import { formatKm, formatMs, formatPercent } from '../lib/format'
 
 export const REPO_URL = 'https://github.com/dgonzo14/world_DG'
@@ -7,11 +8,17 @@ const source = (path: string) => `${REPO_URL}/blob/main/${path}`
 interface Props {
   atlas: Atlas
   fetchMs: number
+  flights: FlightsState | null
 }
 
-export default function EnginePanel({ atlas, fetchMs }: Props) {
+export default function EnginePanel({ atlas, fetchMs, flights }: Props) {
   const { diagnostics: d, route, totals } = atlas
   const stops = totals.visited + 1
+
+  // Cross-check the two datasets: every airport's country should be on the visited list.
+  const visitedIso2 = new Set(atlas.visited.map((c) => c.iso2))
+  const airportCountries = flights ? [...new Set(flights.log.airports.map((a) => a.item.country))] : []
+  const unlisted = airportCountries.filter((iso2) => !visitedIso2.has(iso2))
 
   const modules = [
     {
@@ -42,6 +49,17 @@ export default function EnginePanel({ atlas, fetchMs }: Props) {
       formula: 'iso_a3 → adm0_a3 → … → /^[A-Z]{3}$/',
       metric: `${d.matchedCodes}/${d.matchedCodes + d.unmatchedCodes.length} visited codes matched${d.unmatchedCodes.length ? ` · missing: ${d.unmatchedCodes.join(', ')}` : ''}`,
     },
+    ...(flights
+      ? [
+          {
+            title: 'Flight log pipeline',
+            file: 'scripts/import-flighty.ts',
+            body: 'A build-time script parses my Flighty CSV export, joins each airport to OurAirports coordinates and OpenFlights IANA time zones, and converts local gate times to UTC (DST-aware) for block time and delay. It publishes only month, route, airline and aircraft: no flight numbers, no exact dates, and nothing scheduled in the future.',
+            formula: 'local gate time + IANA zone → UTC → block minutes',
+            metric: `${flights.log.totals.flights} flights · ${flights.log.totals.airports} airports · ${flights.log.totals.routes} routes · aggregated in ${formatMs(flights.buildMs)} · airports in ${airportCountries.length} countries, ${unlisted.length ? `not on the visited list: ${unlisted.join(', ')}` : 'all on the visited list'}`,
+          },
+        ]
+      : []),
     {
       title: 'Rendering & state',
       file: 'src/components/GlobeView.tsx',
@@ -76,7 +94,8 @@ export default function EnginePanel({ atlas, fetchMs }: Props) {
         <h3 className="h-mono">Quality gates</h3>
         <ul>
           <li>TypeScript in strict mode across the app and geometry library</li>
-          <li>Vitest unit tests for area, distance, centroid and 2-opt, plus integration tests on the real dataset</li>
+          <li>Vitest unit tests for area, distance, centroid, 2-opt, CSV parsing and time zones, plus integration tests on the real datasets</li>
+          <li>A test asserts the published flight file contains only the whitelisted, month-precision fields</li>
           <li>ESLint with typescript-eslint and the React hooks rules</li>
           <li>GitHub Actions runs type-check, lint and tests before every Pages deploy</li>
         </ul>

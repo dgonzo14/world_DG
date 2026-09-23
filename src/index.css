@@ -928,6 +928,228 @@ kbd {
   color: var(--signal);
 }
 
+/* ---------- Mode switch ---------- */
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  border: 1.5px solid var(--line-2);
+  border-radius: 6px;
+  background: rgba(12, 15, 20, 0.6);
+  backdrop-filter: blur(6px);
+}
+.segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+  font: 700 0.92rem/1 var(--f-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.segmented button:hover {
+  color: var(--paper);
+}
+.segmented button[aria-pressed='true'] {
+  background: var(--paper);
+  color: var(--ink);
+}
+.segmented kbd {
+  color: inherit;
+  border-color: currentColor;
+  opacity: 0.55;
+}
+.swatch--flown {
+  height: 3px;
+  width: 18px;
+  background: var(--signal);
+}
+.swatch--airport {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--paper);
+}
+.swatch--visited-dim {
+  background: #6b5518;
+}
+
+/* ---------- Country card: airports ---------- */
+.card__airports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.card__airports span {
+  padding: 3px 7px;
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  font: 700 0.78rem/1.2 var(--f-mono);
+}
+.card__airports small {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* ---------- Monthly column chart ---------- */
+.chart {
+  margin: 28px 0 0;
+}
+.chart__title {
+  margin-bottom: 10px;
+  font: 700 0.72rem/1 var(--f-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.chart__plot {
+  position: relative;
+}
+.chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.chart__grid {
+  stroke: var(--line);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+.chart__tick {
+  fill: var(--muted);
+  font: 500 9px var(--f-mono);
+  font-variant-numeric: tabular-nums;
+}
+.chart__label {
+  fill: var(--paper);
+  font: 700 10px var(--f-mono);
+}
+.chart__bar {
+  fill: var(--signal);
+  transition: opacity 0.15s;
+}
+.chart__bar.is-muted {
+  opacity: 0.35;
+}
+.chart__bar.is-active {
+  fill: #fff3c4;
+  opacity: 1;
+}
+.chart__hit {
+  fill: transparent;
+  cursor: default;
+}
+.chart__tip {
+  position: absolute;
+  top: -6px;
+  transform: translate(-50%, -100%);
+  display: grid;
+  gap: 2px;
+  padding: 7px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--ink-3);
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.7);
+}
+.chart__tip b {
+  font: 700 0.95rem/1 var(--f-display);
+  text-transform: uppercase;
+}
+.chart__tip span {
+  font: 500 0.72rem/1.2 var(--f-mono);
+  color: var(--paper-dim);
+}
+.chart__table {
+  margin-top: 10px;
+  font-size: 0.85rem;
+}
+.chart__table summary {
+  font: 500 0.72rem/1 var(--f-mono);
+  color: var(--muted);
+  cursor: pointer;
+}
+.chart__table summary:hover {
+  color: var(--paper);
+}
+.chart__table table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.chart__table th,
+.chart__table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+}
+.chart__table th:first-child,
+.chart__table thead th:first-child {
+  text-align: left;
+  font-weight: 500;
+}
+.chart__table thead th {
+  font: 500 0.68rem/1.2 var(--f-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---------- Horizontal bars ---------- */
+.hbars {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hbars li {
+  display: grid;
+  grid-template-columns: minmax(0, 200px) 1fr 32px;
+  align-items: center;
+  gap: 12px;
+}
+.hbars__label {
+  display: grid;
+  font: 600 1rem/1.1 var(--f-display);
+  letter-spacing: 0.02em;
+  overflow: hidden;
+}
+.hbars__label small {
+  font: 400 0.74rem/1.3 var(--f-body);
+  color: var(--muted);
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hbars__track {
+  height: 8px;
+  background: var(--ink-4);
+  border-radius: 0 4px 4px 0;
+  overflow: hidden;
+}
+.hbars__track span {
+  display: block;
+  height: 100%;
+  background: var(--signal);
+  border-radius: 0 4px 4px 0;
+}
+.hbars__value {
+  font: 500 0.78rem/1 var(--f-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--paper-dim);
+}
+
 /* ---------- Responsive ---------- */
 @media (max-width: 1100px) {
   :root {
@@ -984,8 +1206,12 @@ kbd {
   .brand__name small {
     display: none;
   }
-  .hud--controls .btn kbd {
+  .hud--controls .btn kbd,
+  .segmented kbd {
     display: none;
+  }
+  .hbars li {
+    grid-template-columns: minmax(0, 120px) 1fr 28px;
   }
   .card__hint {
     display: none;

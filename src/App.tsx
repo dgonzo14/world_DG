@@ -2,16 +2,18 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import CountryCard from './components/CountryCard'
 import CountryList from './components/CountryList'
 import EnginePanel, { REPO_URL } from './components/EnginePanel'
+import FlightsPanel from './components/FlightsPanel'
 import StatsPanel from './components/StatsPanel'
-import type { CameraTarget } from './components/GlobeView'
+import type { CameraTarget, Mode } from './components/GlobeView'
 import { HOME } from './data/home'
 import visitedCountries from './data/visitedCountries'
 import type { Atlas, Country } from './geo/atlas'
 import { useAtlas } from './hooks/useAtlas'
 import { useElementSize } from './hooks/useElementSize'
+import { useFlights } from './hooks/useFlights'
 import { useHashSelection } from './hooks/useHashSelection'
 import { useReducedMotion } from './hooks/useReducedMotion'
-import { formatBuildDate, formatKm, pad2 } from './lib/format'
+import { formatBuildDate, formatCompact, formatKm, formatMonth, pad2 } from './lib/format'
 import { hasWebGL } from './lib/webgl'
 
 // three.js is ~70% of the bundle; load it after the shell has painted.
@@ -19,14 +21,18 @@ const GlobeView = lazy(() => import('./components/GlobeView'))
 
 const PORTFOLIO_URL = 'https://dgonzo14.github.io/'
 const TOUR_DWELL_MS = 3600
+const REPLAY_STEP_MS = 120
 const RESET_VIEW: CameraTarget = { lat: 24, lng: -38, altitude: 2.35 }
 
-type Tab = 'countries' | 'stats' | 'engine'
+type Tab = 'countries' | 'flights' | 'stats' | 'engine'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'countries', label: 'Countries' },
+  { id: 'flights', label: 'Flights' },
   { id: 'stats', label: 'Stats' },
   { id: 'engine', label: 'Under the hood' },
 ]
+
+const initialView = () => new URLSearchParams(window.location.search).get('view')
 
 function cameraFor(country: Country): CameraTarget {
   // Bigger countries need a higher camera to fit on screen.
@@ -93,9 +99,14 @@ function TopBar({ atlas }: { atlas: Atlas | null }) {
 
 function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
   const [code, setCode] = useHashSelection()
-  const [tab, setTab] = useState<Tab>('countries')
-  const [showRoute, setShowRoute] = useState(true)
+  const flightsState = useFlights()
+  const flightLog = flightsState?.log ?? null
+  // `?view=flights` opens straight into the flight log (shareable link).
+  const [mode, setMode] = useState<Mode>(() => (initialView() === 'flights' ? 'flights' : 'loop'))
+  const [tab, setTab] = useState<Tab>(() => (initialView() === 'flights' ? 'flights' : 'countries'))
+  const [showArcs, setShowArcs] = useState(true)
   const [tour, setTour] = useState<{ index: number; playing: boolean } | null>(null)
+  const [replay, setReplay] = useState<{ index: number; playing: boolean } | null>(null)
   const [resetCount, setResetCount] = useState(0)
   const [webgl] = useState(hasWebGL)
   const [globeRef, globeSize] = useElementSize<HTMLDivElement>()
@@ -105,11 +116,20 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
 
   const selected = code ? atlas.byCode.get(code) ?? null : null
   const stops = atlas.visited
+  const inFlights = mode === 'flights' && flightLog !== null
+  const tabs = TABS.filter((t) => t.id !== 'flights' || flightLog)
 
   const camera = useMemo<CameraTarget | null>(() => {
     if (selected) return cameraFor(selected)
     return resetCount > 0 ? { ...RESET_VIEW } : null
   }, [selected, resetCount])
+
+  // Running total of distance, for the replay readout.
+  const kmSoFar = useMemo(() => {
+    const totals: number[] = []
+    for (const f of flightLog?.flights ?? []) totals.push((totals.at(-1) ?? 0) + f.km)
+    return totals
+  }, [flightLog])
 
   const select = useCallback(
     (next: string | null, replace = false) => {
@@ -128,9 +148,17 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
     [selected, stops, select],
   )
 
+  const switchMode = (next: Mode) => {
+    setTour(null)
+    setReplay(null)
+    setMode(next)
+    if (next === 'flights') setTab('flights')
+    else if (tab === 'flights') setTab('countries')
+  }
+
   // --- Tour: fly the optimized route one stop at a time -------------------
   const startTour = () => {
-    setShowRoute(true)
+    setShowArcs(true)
     setTour({ index: 0, playing: true })
     select(stops[0].code, true)
   }
@@ -154,6 +182,24 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
     return () => window.clearTimeout(timer)
   }, [tour, stops, select, stopTour])
 
+  // --- Replay: every flight in order, as comets over the growing network ---
+  const startReplay = () => {
+    select(null, true)
+    setShowArcs(true)
+    setTab('flights')
+    // Reduced motion: skip the animation and show the finished network.
+    setReplay(reducedMotion ? null : { index: 0, playing: true })
+  }
+
+  useEffect(() => {
+    if (!replay?.playing || !flightLog) return undefined
+    const timer = window.setTimeout(() => {
+      const next = replay.index + 1
+      setReplay(next >= flightLog.flights.length ? null : { index: next, playing: true })
+    }, REPLAY_STEP_MS)
+    return () => window.clearTimeout(timer)
+  }, [replay, flightLog])
+
   // --- Keyboard shortcuts ----------------------------------------------------
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
@@ -162,6 +208,7 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
         if (e.key === 'Escape' && target === searchRef.current) searchRef.current?.blur()
         return
       }
+      const key = e.key.toLowerCase()
       if (e.key === '/') {
         e.preventDefault()
         setTab('countries')
@@ -174,9 +221,15 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
         step(-1)
       } else if (e.key === 'Escape') {
         if (tour) stopTour()
+        else if (replay) setReplay(null)
         else select(null)
-      } else if (e.key.toLowerCase() === 't') {
-        if (tour) setTour({ ...tour, playing: !tour.playing })
+      } else if (key === 'f' && flightLog) {
+        switchMode(mode === 'flights' ? 'loop' : 'flights')
+      } else if (key === 't') {
+        if (inFlights) {
+          if (replay) setReplay({ ...replay, playing: !replay.playing })
+          else startReplay()
+        } else if (tour) setTour({ ...tour, playing: !tour.playing })
         else startTour()
       }
     }
@@ -188,12 +241,13 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
     e.preventDefault()
     e.stopPropagation()
-    const next = (index + (e.key === 'ArrowRight' ? 1 : -1) + TABS.length) % TABS.length
-    setTab(TABS[next].id)
+    const next = (index + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length
+    setTab(tabs[next].id)
     tabRefs.current[next]?.focus()
   }
 
-  const activeLeg = tour ? tour.index : selected?.stop ? selected.stop - 1 : null
+  const activeLeg = inFlights ? null : tour ? tour.index : selected?.stop ? selected.stop - 1 : null
+  const replayFlight = replay && flightLog ? flightLog.flights[replay.index] : null
 
   return (
     <main className="stage">
@@ -204,11 +258,14 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
               <Suspense fallback={<div className="loader"><span className="loader__orb" aria-hidden="true" />Loading 3D globe…</div>}>
                 <GlobeView
                   atlas={atlas}
+                  flightLog={flightLog}
+                  mode={inFlights ? 'flights' : 'loop'}
                   width={globeSize.width}
                   height={globeSize.height}
                   selected={selected}
                   activeLeg={activeLeg}
-                  showRoute={showRoute}
+                  replayIndex={replay?.index ?? null}
+                  showArcs={showArcs}
                   autoRotate={!selected && !tour}
                   reducedMotion={reducedMotion}
                   camera={camera}
@@ -223,16 +280,35 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
           )}
         </div>
 
-        <div className={`hud hud--title ${tour || selected ? 'is-dim' : ''}`}>
-          <p className="eyebrow">Travel atlas · {pad2(atlas.totals.visited)} stamps</p>
-          <h1>
-            {atlas.totals.visited} countries.
-            <br />
-            One round trip.
-          </h1>
-          <p className="hud__sub">
-            {formatKm(atlas.route.totalKm)} from {atlas.home.name} and back, planned by a 2-opt route optimizer.
-          </p>
+        <div className={`hud hud--title ${tour || replay || selected ? 'is-dim' : ''}`}>
+          {inFlights ? (
+            <>
+              <p className="eyebrow">
+                Flight log · {formatMonth(flightLog.first)} – {formatMonth(flightLog.through)}
+              </p>
+              <h1>
+                {flightLog.totals.flights} flights.
+                <br />
+                {formatCompact(flightLog.totals.km)} km.
+              </h1>
+              <p className="hud__sub">
+                {flightLog.totals.laps.toFixed(1)}× around the equator through {flightLog.totals.airports} airports,
+                imported from my Flighty history.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="eyebrow">Travel atlas · {pad2(atlas.totals.visited)} stamps</p>
+              <h1>
+                {atlas.totals.visited} countries.
+                <br />
+                One round trip.
+              </h1>
+              <p className="hud__sub">
+                {formatKm(atlas.route.totalKm)} from {atlas.home.name} and back, planned by a 2-opt route optimizer.
+              </p>
+            </>
+          )}
         </div>
 
         {tour ? (
@@ -266,13 +342,56 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
               </button>
             </div>
           </div>
+        ) : replay && flightLog && replayFlight ? (
+          <div className="hud hud--tour" role="group" aria-label="Flight replay">
+            <div className="tour__progress" aria-hidden="true">
+              <span style={{ width: `${((replay.index + 1) / flightLog.flights.length) * 100}%` }} />
+            </div>
+            <p className="tour__now">
+              <span>{formatMonth(replayFlight.month)}</span>
+              <b>
+                {replayFlight.from} → {replayFlight.to}
+              </b>
+              <small>
+                #{replay.index + 1} · {formatCompact(kmSoFar[replay.index])} km
+              </small>
+            </p>
+            <div className="tour__buttons">
+              <button
+                type="button"
+                className="btn btn--signal"
+                onClick={() => setReplay({ ...replay, playing: !replay.playing })}
+              >
+                {replay.playing ? 'Pause' : 'Resume'}
+              </button>
+              <button type="button" className="btn btn--ghost" onClick={() => setReplay(null)}>
+                Skip to end
+              </button>
+            </div>
+          </div>
         ) : (
           <div className="hud hud--controls">
-            <button type="button" className="btn btn--signal" onClick={startTour}>
-              ▶ Fly the route <kbd>T</kbd>
-            </button>
-            <button type="button" className="btn btn--ghost" aria-pressed={showRoute} onClick={() => setShowRoute((v) => !v)}>
-              {showRoute ? 'Hide' : 'Show'} arcs
+            {flightLog && (
+              <div className="segmented" role="group" aria-label="Globe mode">
+                <button type="button" aria-pressed={!inFlights} onClick={() => switchMode('loop')}>
+                  Loop
+                </button>
+                <button type="button" aria-pressed={inFlights} onClick={() => switchMode('flights')}>
+                  Flights <kbd>F</kbd>
+                </button>
+              </div>
+            )}
+            {inFlights ? (
+              <button type="button" className="btn btn--signal" onClick={startReplay}>
+                ▶ Replay {flightLog.months.length} months <kbd>T</kbd>
+              </button>
+            ) : (
+              <button type="button" className="btn btn--signal" onClick={startTour}>
+                ▶ Fly the route <kbd>T</kbd>
+              </button>
+            )}
+            <button type="button" className="btn btn--ghost" aria-pressed={showArcs} onClick={() => setShowArcs((v) => !v)}>
+              {showArcs ? 'Hide' : 'Show'} arcs
             </button>
             <button
               type="button"
@@ -288,10 +407,20 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
         )}
 
         <ul className="hud hud--legend" aria-label="Legend">
-          <li><span className="swatch swatch--visited" />Visited</li>
-          <li><span className="swatch swatch--land" />Not yet</li>
-          <li><span className="swatch swatch--route" />Route</li>
-          <li><span className="swatch swatch--home" />{atlas.home.code}</li>
+          {inFlights ? (
+            <>
+              <li><span className="swatch swatch--flown" />Flown route</li>
+              <li><span className="swatch swatch--airport" />Airport</li>
+              <li><span className="swatch swatch--visited-dim" />Visited country</li>
+            </>
+          ) : (
+            <>
+              <li><span className="swatch swatch--visited" />Visited</li>
+              <li><span className="swatch swatch--land" />Not yet</li>
+              <li><span className="swatch swatch--route" />Route</li>
+              <li><span className="swatch swatch--home" />{atlas.home.code}</li>
+            </>
+          )}
         </ul>
       </section>
 
@@ -300,6 +429,7 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
           <CountryCard
             atlas={atlas}
             country={selected}
+            flightLog={flightLog}
             onPrev={() => step(-1)}
             onNext={() => step(1)}
             onClose={() => (tour ? stopTour() : select(null))}
@@ -307,7 +437,7 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
         )}
 
         <div className="tabs" role="tablist" aria-label="Atlas views">
-          {TABS.map((t, i) => (
+          {tabs.map((t, i) => (
             <button
               key={t.id}
               ref={(el) => {
@@ -332,8 +462,11 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
           {tab === 'countries' && (
             <CountryList atlas={atlas} selectedCode={code} onSelect={(c) => select(c)} searchRef={searchRef} />
           )}
+          {tab === 'flights' && flightLog && (
+            <FlightsPanel log={flightLog} replayMonth={replayFlight?.month ?? null} />
+          )}
           {tab === 'stats' && <StatsPanel atlas={atlas} onSelect={(c) => select(c)} />}
-          {tab === 'engine' && <EnginePanel atlas={atlas} fetchMs={fetchMs} />}
+          {tab === 'engine' && <EnginePanel atlas={atlas} fetchMs={fetchMs} flights={flightsState} />}
         </div>
       </aside>
     </main>
