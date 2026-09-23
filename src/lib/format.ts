@@ -26,3 +26,18 @@ export function escapeHtml(value: string) {
 export function formatBuildDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
+
+const monthFormat = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+
+/** "2025-03" → "Mar 2025" */
+export function formatMonth(month: string) {
+  const [y, m] = month.split('-').map(Number)
+  return monthFormat.format(new Date(Date.UTC(y, m - 1, 1)))
+}
+
+/** 964 → "16h 04m" */
+export function formatDuration(minutes: number) {
+  const m = Math.round(Math.abs(minutes))
+  const h = Math.floor(m / 60)
+  return h ? `${h}h ${String(m % 60).padStart(2, '0')}m` : `${m} min`
+}
