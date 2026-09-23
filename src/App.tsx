@@ -19,7 +19,6 @@ import { hasWebGL } from './lib/webgl'
 // three.js is ~70% of the bundle; load it after the shell has painted.
 const GlobeView = lazy(() => import('./components/GlobeView'))
 
-const PORTFOLIO_URL = 'https://dgonzo14.github.io/'
 const TOUR_DWELL_MS = 3600
 const REPLAY_STEP_MS = 120
 const RESET_VIEW: CameraTarget = { lat: 24, lng: -38, altitude: 2.35 }
@@ -75,12 +74,12 @@ export default function App() {
 function TopBar({ atlas }: { atlas: Atlas | null }) {
   return (
     <header className="topbar">
-      <a className="brand" href={PORTFOLIO_URL}>
-        <span className="brand__mark">DG</span>
+      <div className="brand">
+        <img className="brand__avatar" src={`${import.meta.env.BASE_URL}avatar.png`} width={34} height={34} alt="Diego Gonzalez" />
         <span className="brand__name">
-          Atlas <small>Diego Gonzalez</small>
+          Atlas <small aria-hidden="true">Diego Gonzalez</small>
         </span>
-      </a>
+      </div>
       {atlas && (
         <p className="topbar__meta">
           {atlas.totals.visited} countries · {atlas.totals.continentsVisited} continents · updated{' '}
@@ -88,7 +87,6 @@ function TopBar({ atlas }: { atlas: Atlas | null }) {
         </p>
       )}
       <nav className="topbar__links" aria-label="External">
-        <a href={PORTFOLIO_URL}>Portfolio</a>
         <a href={REPO_URL} target="_blank" rel="noreferrer">
           Source ↗
         </a>

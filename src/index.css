@@ -171,15 +171,13 @@ kbd {
   gap: 10px;
   text-decoration: none;
 }
-.brand__mark {
-  display: grid;
-  place-items: center;
+.brand__avatar {
+  display: block;
   width: 34px;
   height: 34px;
-  border-radius: 4px;
-  background: var(--signal);
-  color: var(--ink);
-  font: 800 1rem/1 var(--f-display);
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 2px var(--signal);
 }
 .brand__name {
   display: flex;
