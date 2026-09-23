@@ -63,7 +63,7 @@ export default function EnginePanel({ atlas, fetchMs, flights }: Props) {
     {
       title: 'Rendering & state',
       file: 'src/components/GlobeView.tsx',
-      body: 'three.js via react-globe.gl: extruded country meshes, animated great-circle arcs, and pulse rings. Selection lives in the URL (#/country/JPN), so views are shareable and the back button works. Honors prefers-reduced-motion and falls back to the list without WebGL.',
+      body: 'three.js via react-globe.gl: extruded country meshes, animated great-circle arcs, and pulse rings. Airports are real DOM buttons positioned by the globe and updated in place, so a replay tick never rebuilds them. Selection lives in the URL (#/country/JPN, #/airport/ATL), so views are shareable and the back button works. Honors prefers-reduced-motion and falls back to the list without WebGL.',
       formula: 'URL ⇄ selection ⇄ camera',
       metric: `GeoJSON fetched in ${formatMs(fetchMs)} · ${stops} route nodes · ${route.legs.length} arcs`,
     },

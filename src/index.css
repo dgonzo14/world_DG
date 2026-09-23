@@ -983,13 +983,212 @@ kbd {
   flex-wrap: wrap;
   gap: 6px;
 }
-.card__airports span {
-  padding: 3px 7px;
+.card__airports button,
+.ap-chips button {
+  padding: 4px 8px;
   border: 1px solid var(--line-2);
   border-radius: 3px;
+  background: transparent;
   font: 700 0.78rem/1.2 var(--f-mono);
+  cursor: pointer;
+  transition: border-color 0.12s, background-color 0.12s;
+}
+.card__airports button:hover,
+.ap-chips button:hover {
+  border-color: var(--signal);
+}
+.ap-chips button[aria-pressed='true'] {
+  border-color: var(--signal);
+  background: var(--signal);
+  color: var(--ink);
+}
+.ap-chips button[aria-pressed='true'] small {
+  color: rgba(12, 15, 20, 0.6);
+}
+.card__airports span {
+  padding: 4px 8px;
+  font: 500 0.78rem/1.2 var(--f-mono);
+  color: var(--muted);
 }
 .card__airports small {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* ---------- Airport markers on the globe ---------- */
+.ap {
+  --size: 7px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  /* Hit target is larger than the dot. */
+  width: calc(var(--size) + 14px);
+  height: calc(var(--size) + 14px);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: opacity 0.2s;
+}
+.ap__dot {
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  background: var(--paper);
+  box-shadow: 0 0 0 2px rgba(12, 15, 20, 0.85);
+  transition: transform 0.15s var(--ease), background-color 0.15s;
+}
+.ap__label {
+  position: absolute;
+  left: calc(50% + var(--size) / 2 + 6px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: rgba(12, 15, 20, 0.82);
+  white-space: nowrap;
+  pointer-events: none;
+  font: 500 0.68rem/1.2 var(--f-mono);
+  color: var(--paper-dim);
+}
+.ap__label b {
+  font-weight: 700;
+  color: var(--paper);
+  letter-spacing: 0.04em;
+}
+/* Busiest airports show just the code; hover or selection reveals the rest. */
+.ap .ap__city,
+.ap .ap__count {
+  display: none;
+}
+.ap:not(.is-top):not(.is-selected):not(.is-connected) .ap__label {
+  display: none;
+}
+.ap:hover .ap__label,
+.ap:hover .ap__city,
+.ap:hover .ap__count,
+.ap.is-selected .ap__city,
+.ap.is-selected .ap__count {
+  display: inline;
+}
+.ap:hover .ap__label,
+.ap.is-selected .ap__label {
+  display: flex;
+  z-index: 2;
+}
+.ap__count::before {
+  content: '· ';
+}
+.ap:hover .ap__dot {
+  transform: scale(1.35);
+}
+.ap.is-selected .ap__dot {
+  background: var(--signal);
+  transform: scale(1.4);
+  box-shadow: 0 0 0 2px rgba(12, 15, 20, 0.9), 0 0 0 5px rgba(255, 196, 37, 0.35);
+}
+.ap.is-selected .ap__label {
+  background: var(--signal);
+  color: rgba(12, 15, 20, 0.75);
+}
+.ap.is-selected .ap__label b {
+  color: var(--ink);
+}
+.ap.is-connected .ap__dot {
+  background: #fff3c4;
+}
+.ap.is-dim {
+  opacity: 0.25;
+}
+.ap.is-behind {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---------- Airport card ---------- */
+.card__name--airport {
+  font-size: 1.45rem;
+  line-height: 1.05;
+}
+.card__sub {
+  margin: 16px 0 8px;
+  font: 700 0.66rem/1 var(--f-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.routes-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.routes-list__row {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 70px 24px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.routes-list__row:hover {
+  background: var(--ink-4);
+}
+.routes-list__code {
+  font: 700 0.8rem/1 var(--f-mono);
+}
+.routes-list__city {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+  color: var(--paper-dim);
+}
+.routes-list__track {
+  height: 6px;
+  border-radius: 0 3px 3px 0;
+  background: var(--ink-4);
+  overflow: hidden;
+}
+.routes-list__track span {
+  display: block;
+  height: 100%;
+  background: var(--signal);
+  border-radius: 0 3px 3px 0;
+}
+.routes-list__count {
+  font: 500 0.76rem/1 var(--f-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--paper-dim);
+}
+.card__more {
+  margin-top: 6px;
+  font: 500 0.7rem/1 var(--f-mono);
+  color: var(--muted);
+}
+
+/* ---------- All-airports chips ---------- */
+.ap-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ap-chips small {
   color: var(--muted);
   font-weight: 500;
 }
@@ -1146,6 +1345,31 @@ kbd {
   font-variant-numeric: tabular-nums;
   text-align: right;
   color: var(--paper-dim);
+}
+
+.hbars--interactive li {
+  display: block;
+}
+.hbars__row {
+  display: grid;
+  grid-template-columns: minmax(0, 200px) 1fr 32px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: -4px 0;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.hbars__row:hover {
+  background: var(--ink-3);
+}
+.hbars__row[aria-pressed='true'] {
+  background: var(--signal-soft);
+  box-shadow: inset 0 0 0 1px rgba(255, 196, 37, 0.5);
 }
 
 /* ---------- Responsive ---------- */

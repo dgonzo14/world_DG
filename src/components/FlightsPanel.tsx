@@ -6,6 +6,8 @@ import MonthlyChart from './MonthlyChart'
 interface Props {
   log: FlightLog
   replayMonth: string | null
+  selectedAirport: string | null
+  onSelectAirport: (iata: string) => void
 }
 
 interface BarRow {
@@ -15,28 +17,59 @@ interface BarRow {
   value: number
 }
 
-/** Single-series horizontal bars: one hue, values in text ink at the tip. */
-function Bars({ rows, unit }: { rows: BarRow[]; unit: string }) {
+/**
+ * Single-series horizontal bars: one hue, values in text ink at the tip.
+ * With `onSelect`, each row is a button.
+ */
+function Bars({
+  rows,
+  unit,
+  onSelect,
+  selectedKey,
+}: {
+  rows: BarRow[]
+  unit: string
+  onSelect?: (key: string) => void
+  selectedKey?: string | null
+}) {
   const max = Math.max(...rows.map((r) => r.value), 1)
   return (
-    <ul className="hbars">
-      {rows.map((r) => (
-        <li key={r.key} title={`${r.label}: ${r.value} ${unit}`}>
-          <span className="hbars__label">
-            {r.label}
-            {r.detail && <small>{r.detail}</small>}
-          </span>
-          <span className="hbars__track" aria-hidden="true">
-            <span style={{ width: `${(r.value / max) * 100}%` }} />
-          </span>
-          <span className="hbars__value">{r.value}</span>
-        </li>
-      ))}
+    <ul className={`hbars ${onSelect ? 'hbars--interactive' : ''}`}>
+      {rows.map((r) => {
+        const content = (
+          <>
+            <span className="hbars__label">
+              {r.label}
+              {r.detail && <small>{r.detail}</small>}
+            </span>
+            <span className="hbars__track" aria-hidden="true">
+              <span style={{ width: `${(r.value / max) * 100}%` }} />
+            </span>
+            <span className="hbars__value">{r.value}</span>
+          </>
+        )
+        return (
+          <li key={r.key} title={`${r.label}: ${r.value} ${unit}`}>
+            {onSelect ? (
+              <button
+                type="button"
+                className="hbars__row"
+                aria-pressed={selectedKey === r.key}
+                onClick={() => onSelect(r.key)}
+              >
+                {content}
+              </button>
+            ) : (
+              content
+            )}
+          </li>
+        )
+      })}
     </ul>
   )
 }
 
-export default function FlightsPanel({ log, replayMonth }: Props) {
+export default function FlightsPanel({ log, replayMonth, selectedAirport, onSelectAirport }: Props) {
   const { totals, records, punctuality } = log
   const otherAirlines = log.airlines.slice(5).reduce((acc, a) => acc + a.count, 0)
 
@@ -93,6 +126,8 @@ export default function FlightsPanel({ log, replayMonth }: Props) {
       <section aria-labelledby="airports-title">
         <h3 id="airports-title" className="h-mono">Busiest airports (arrivals + departures)</h3>
         <Bars
+          onSelect={onSelectAirport}
+          selectedKey={selectedAirport}
           unit="visits"
           rows={log.airports.slice(0, 8).map((a) => ({
             key: a.item.iata,
@@ -101,6 +136,26 @@ export default function FlightsPanel({ log, replayMonth }: Props) {
             value: a.count,
           }))}
         />
+      </section>
+
+      <section aria-labelledby="all-airports-title">
+        <h3 id="all-airports-title" className="h-mono">
+          All {log.airports.length} airports
+        </h3>
+        <ul className="ap-chips">
+          {log.airports.map((a) => (
+            <li key={a.item.iata}>
+              <button
+                type="button"
+                aria-pressed={selectedAirport === a.item.iata}
+                title={`${a.item.name}, ${a.item.city}`}
+                onClick={() => onSelectAirport(a.item.iata)}
+              >
+                {a.item.iata} <small>{a.count}</small>
+              </button>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section aria-labelledby="fleet-title">
@@ -150,6 +205,15 @@ export default function FlightsPanel({ log, replayMonth }: Props) {
                 {records.shortest.from} → {records.shortest.to} · {formatKm(records.shortest.km)}
               </dd>
             </div>
+            {totals.returnedToOrigin > 0 && (
+              <div>
+                <dt>Air returns</dt>
+                <dd>
+                  {totals.returnedToOrigin} {totals.returnedToOrigin === 1 ? 'flight' : 'flights'} landed back at
+                  the origin
+                </dd>
+              </div>
+            )}
             <div>
               <dt>Busiest month</dt>
               <dd>

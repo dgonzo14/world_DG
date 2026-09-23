@@ -19,6 +19,8 @@ interface Props {
   width: number
   height: number
   selected: Country | null
+  /** Flights mode: selected airport (IATA). */
+  selectedAirport: string | null
   /** Loop mode: route leg to emphasise (0 = home → first stop). */
   activeLeg: number | null
   /** Flights mode: index of the flight currently being replayed. */
@@ -28,6 +30,7 @@ interface Props {
   reducedMotion: boolean
   camera: CameraTarget | null
   onSelect: (code: string | null) => void
+  onSelectAirport: (iata: string) => void
 }
 
 interface ArcBase {
@@ -68,7 +71,7 @@ interface AirportPoint extends LatLng {
 }
 
 interface Marker extends LatLng {
-  kind: 'home' | 'selected' | 'arrival'
+  kind: 'home' | 'selected' | 'arrival' | 'airport'
   text: string
 }
 
@@ -130,6 +133,7 @@ export default function GlobeView({
   width,
   height,
   selected,
+  selectedAirport,
   activeLeg,
   replayIndex,
   showArcs,
@@ -137,6 +141,7 @@ export default function GlobeView({
   reducedMotion,
   camera,
   onSelect,
+  onSelectAirport,
 }: Props) {
   const globeRef = useRef<GlobeMethods | undefined>(undefined)
   const [ready, setReady] = useState(false)
@@ -168,6 +173,7 @@ export default function GlobeView({
     if (!flightLog) return []
     const byKey = new Map<string, number[]>()
     for (const f of flightLog.flights) {
+      if (f.from === f.to) continue
       const key = [f.from, f.to].sort().join('-')
       if (!byKey.has(key)) byKey.set(key, [])
       byKey.get(key)!.push(f.index)
@@ -202,7 +208,8 @@ export default function GlobeView({
     if (!flightLog) return []
     const byCode = new Map<string, AirportPoint>()
     for (const f of flightLog.flights) {
-      for (const ap of [f.origin, f.destination]) {
+      // An air return (from === to) is one visit, not two.
+      for (const ap of f.from === f.to ? [f.origin] : [f.origin, f.destination]) {
         let point = byCode.get(ap.iata)
         if (!point) {
           point = { iata: ap.iata, city: ap.city, lat: ap.lat, lng: ap.lng, firstFlight: f.index, flights: [] }
@@ -229,10 +236,23 @@ export default function GlobeView({
     [flights, replaying, airportPoints, limit],
   )
 
+  // Resting labels for the busiest few only; the rest reveal on hover, which keeps
+  // the dense US cluster readable.
   const topAirports = useMemo(
-    () => (flightLog ? new Set(flightLog.airports.slice(0, 10).map((a) => a.item.iata)) : new Set<string>()),
+    () => (flightLog ? new Set(flightLog.airports.slice(0, 6).map((a) => a.item.iata)) : new Set<string>()),
     [flightLog],
   )
+
+  // Airports one hop from the selected airport.
+  const connected = useMemo(() => {
+    const set = new Set<string>()
+    if (!flightLog || !selectedAirport) return set
+    for (const r of flightLog.routes) {
+      if (r.a.iata === selectedAirport) set.add(r.b.iata)
+      if (r.b.iata === selectedAirport) set.add(r.a.iata)
+    }
+    return set
+  }, [flightLog, selectedAirport])
 
   const markers = useMemo<Marker[]>(() => {
     const list: Marker[] = []
@@ -242,13 +262,61 @@ export default function GlobeView({
       const f = flights.flights[limit]
       if (f) list.push({ lat: f.destination.lat, lng: f.destination.lng, kind: 'arrival', text: f.to })
     }
+    const airport = flights && selectedAirport ? airportPoints.find((p) => p.iata === selectedAirport) : null
+    if (airport) list.push({ lat: airport.lat, lng: airport.lng, kind: 'airport', text: airport.iata })
     return list
-  }, [atlas.home, selected, flights, replaying, limit])
+  }, [atlas.home, selected, flights, replaying, limit, selectedAirport, airportPoints])
 
-  const labels = useMemo(() => {
-    if (!flights) return markers.filter((m) => m.kind === 'home')
-    return points.filter((p) => topAirports.has(p.iata)).map((p) => ({ ...p, text: p.iata }))
-  }, [flights, markers, points, topAirports])
+  // Airports carry their own HTML labels, so the text layer is only for home.
+  const labels = useMemo(() => (flights ? [] : markers.filter((m) => m.kind === 'home')), [flights, markers])
+
+  // --- Airport markers -----------------------------------------------------------
+  // react-globe.gl positions these DOM nodes for us. They're created once per
+  // airport and then updated in place, so a replay tick doesn't rebuild 64 elements.
+  const elements = useRef(new Map<string, HTMLButtonElement>())
+  const onSelectAirportRef = useRef(onSelectAirport)
+  const applyRef = useRef<(el: HTMLButtonElement, p: AirportPoint) => void>(() => {})
+
+  useEffect(() => {
+    onSelectAirportRef.current = onSelectAirport
+    applyRef.current = (el, p) => {
+      const n = countUpTo(p.flights, limit)
+      const isSelected = p.iata === selectedAirport
+      const isConnected = connected.has(p.iata)
+      el.style.setProperty('--size', `${Math.min(18, 5 + 1.5 * Math.sqrt(n)).toFixed(1)}px`)
+      el.classList.toggle('is-selected', isSelected)
+      el.classList.toggle('is-connected', isConnected)
+      el.classList.toggle('is-dim', Boolean(selectedAirport) && !isSelected && !isConnected)
+      el.classList.toggle('is-top', topAirports.has(p.iata))
+      el.querySelector('.ap__count')!.textContent = String(n)
+      el.setAttribute('aria-label', `${p.iata}, ${p.city}: ${n} ${n === 1 ? 'visit' : 'visits'}`)
+      el.setAttribute('aria-pressed', String(isSelected))
+    }
+    for (const p of airportPoints) {
+      const el = elements.current.get(p.iata)
+      if (el) applyRef.current(el, p)
+    }
+  }, [onSelectAirport, limit, selectedAirport, connected, topAirports, airportPoints])
+
+  const airportElement = useCallback((obj: object) => {
+    const p = obj as AirportPoint
+    let el = elements.current.get(p.iata)
+    if (!el) {
+      el = document.createElement('button')
+      el.type = 'button'
+      el.className = 'ap'
+      // The globe is pointer-only; the Flights tab lists every airport for keyboard users.
+      el.tabIndex = -1
+      el.innerHTML = `<span class="ap__dot"></span><span class="ap__label"><b>${p.iata}</b><span class="ap__city">${escapeHtml(p.city)}</span><span class="ap__count"></span></span>`
+      el.addEventListener('click', (event) => {
+        event.stopPropagation()
+        onSelectAirportRef.current(p.iata)
+      })
+      elements.current.set(p.iata, el)
+    }
+    applyRef.current(el, p)
+    return el
+  }, [])
 
   // --- Camera & controls -------------------------------------------------------
   useEffect(() => {
@@ -310,29 +378,37 @@ export default function GlobeView({
   )
 
   const routeCount = useCallback((arc: RouteArc) => countUpTo(arc.flights, limit), [limit])
+  const touches = useCallback(
+    (arc: RouteArc) => Boolean(selectedAirport) && arc.key.split('-').includes(selectedAirport!),
+    [selectedAirport],
+  )
 
   const arcColor = useCallback(
     (obj: object) => {
       const arc = asArc(obj)
       if (arc.kind === 'comet') return ['rgba(255, 243, 196, 0)', COLORS.arcActive]
       if (arc.kind === 'route') {
+        if (selectedAirport) return touches(arc) ? COLORS.arcActive : 'rgba(255, 196, 37, 0.07)'
         const alpha = 0.35 + 0.55 * Math.min(1, routeCount(arc) / 12)
         return `rgba(255, 196, 37, ${alpha.toFixed(2)})`
       }
       if (activeLeg === null) return [COLORS.arcFrom, COLORS.arcTo]
       return arc.index === activeLeg ? [COLORS.arcActive, COLORS.arcActive] : [COLORS.arcDim, COLORS.arcDim]
     },
-    [activeLeg, routeCount],
+    [activeLeg, routeCount, selectedAirport, touches],
   )
 
   const arcStroke = useCallback(
     (obj: object) => {
       const arc = asArc(obj)
       if (arc.kind === 'comet') return 0.9
-      if (arc.kind === 'route') return 0.18 + 0.16 * Math.sqrt(routeCount(arc))
+      if (arc.kind === 'route') {
+        const base = 0.18 + 0.16 * Math.sqrt(routeCount(arc))
+        return selectedAirport && touches(arc) ? base + 0.35 : base
+      }
       return arc.index === activeLeg ? 1.1 : 0.6
     },
-    [activeLeg, routeCount],
+    [activeLeg, routeCount, selectedAirport, touches],
   )
 
   const arcLabel = useCallback(
@@ -391,19 +467,14 @@ export default function GlobeView({
       arcDashAnimateTime={(obj: object) => ({ loop: loopMotion, route: 0, comet: reducedMotion ? 0 : 1100 })[asArc(obj).kind]}
       arcsTransitionDuration={0}
       arcLabel={arcLabel}
-      // Airports
-      pointsData={points}
-      pointLat={(obj: object) => asPoint(obj).lat}
-      pointLng={(obj: object) => asPoint(obj).lng}
-      pointColor={() => COLORS.airport}
-      pointAltitude={0.006}
-      pointRadius={(obj: object) => 0.14 + 0.045 * Math.sqrt(countUpTo(asPoint(obj).flights, limit))}
-      pointsTransitionDuration={0}
-      pointLabel={(obj: object) => {
-        const p = asPoint(obj)
-        const n = countUpTo(p.flights, limit)
-        return `<div class="tip"><span class="tip__code">${p.iata}</span><span class="tip__name">${escapeHtml(p.city)}</span><span class="tip__status">${n} ${n === 1 ? 'visit' : 'visits'}</span></div>`
-      }}
+      // Airports (clickable HTML markers)
+      htmlElementsData={points}
+      htmlLat={(obj: object) => asPoint(obj).lat}
+      htmlLng={(obj: object) => asPoint(obj).lng}
+      htmlAltitude={0.008}
+      htmlElement={airportElement}
+      htmlElementVisibilityModifier={(el: HTMLElement, visible: boolean) => el.classList.toggle('is-behind', !visible)}
+      htmlTransitionDuration={0}
       // Pulses
       ringsData={markers}
       ringLat={(obj: object) => asMarker(obj).lat}
@@ -413,7 +484,7 @@ export default function GlobeView({
           ? (t: number) => `rgba(212, 67, 44, ${1 - t})`
           : (t: number) => `rgba(255, 243, 196, ${1 - t})`
       }
-      ringMaxRadius={(obj: object) => ({ home: 3.2, selected: 4.5, arrival: 2.4 })[asMarker(obj).kind]}
+      ringMaxRadius={(obj: object) => ({ home: 3.2, selected: 4.5, arrival: 2.4, airport: 3 })[asMarker(obj).kind]}
       ringPropagationSpeed={2.2}
       ringRepeatPeriod={reducedMotion ? 0 : 1300}
       // Labels: home in loop mode, busiest airports in flights mode

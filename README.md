@@ -33,10 +33,11 @@ Natural Earth gives France, Norway, Kosovo, N. Cyprus and Somaliland an `iso_a3`
 - **Fly the route** (`T`): a guided tour along the optimized loop, with pause, skip and progress
 - **Flights mode** (`F`): flown routes weighted by frequency, airports sized by visits, and a **replay** (`T`) of every flight in order, synced with the monthly chart
 - Flights tab: monthly chart (with a table view), most-flown routes, busiest airports, aircraft families, airlines, records and punctuality
-- Country cards list the airports I've used there
+- **Airports are interactive:** click a marker, a chip or a list row to open the airport card (departures, arrivals, first and latest visit, airlines, every route from there). Its routes light up on the globe while the rest dims; `←` `→` step through airports by visits
+- Country cards list the airports I've used there, and each one links to its airport
 - Stats: share of world population and land area, continent coverage, hemispheres, extremes, most distant pair
 - Keyboard shortcuts: `/` search, `←` `→` step, `T` tour/replay, `F` flights mode, `Esc` close
-- Shareable URLs: `#/country/JPN` selects a country; `?view=flights` opens the flight log
+- Shareable URLs: `#/country/JPN` or `#/airport/ATL` select a country or airport; `?view=flights` opens the flight log
 - Honors `prefers-reduced-motion`, and falls back to the list when WebGL is unavailable
 - Code-split: the UI shell loads first and three.js streams in after it
 

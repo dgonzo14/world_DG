@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import AirportCard from './components/AirportCard'
 import CountryCard from './components/CountryCard'
 import CountryList from './components/CountryList'
 import EnginePanel, { REPO_URL } from './components/EnginePanel'
@@ -7,6 +8,7 @@ import StatsPanel from './components/StatsPanel'
 import type { CameraTarget, Mode } from './components/GlobeView'
 import { HOME } from './data/home'
 import visitedCountries from './data/visitedCountries'
+import { airportDetail, type AirportDetail } from './flights/log'
 import type { Atlas, Country } from './geo/atlas'
 import { useAtlas } from './hooks/useAtlas'
 import { useElementSize } from './hooks/useElementSize'
@@ -31,12 +33,22 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'engine', label: 'Under the hood' },
 ]
 
-const initialView = () => new URLSearchParams(window.location.search).get('view')
+// `?view=flights`, or a shared airport link, opens straight into the flight log.
+const initialView = () =>
+  new URLSearchParams(window.location.search).get('view') ??
+  (window.location.hash.startsWith('#/airport/') ? 'flights' : null)
 
 function cameraFor(country: Country): CameraTarget {
   // Bigger countries need a higher camera to fit on screen.
   const altitude = Math.min(2.4, Math.max(1.25, 0.9 + Math.sqrt(country.areaKm2) / 2000))
   return { ...country.center, altitude }
+}
+
+function cameraForAirport(detail: AirportDetail): CameraTarget {
+  // Pull back far enough to show the airport's longest route.
+  const longest = Math.max(...detail.routes.map((r) => r.km), 0)
+  const altitude = Math.min(2.6, Math.max(1.2, 0.9 + longest / 9000))
+  return { lat: detail.airport.lat, lng: detail.airport.lng, altitude }
 }
 
 export default function App() {
@@ -96,10 +108,9 @@ function TopBar({ atlas }: { atlas: Atlas | null }) {
 }
 
 function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
-  const [code, setCode] = useHashSelection()
+  const [selection, setSelection] = useHashSelection()
   const flightsState = useFlights()
   const flightLog = flightsState?.log ?? null
-  // `?view=flights` opens straight into the flight log (shareable link).
   const [mode, setMode] = useState<Mode>(() => (initialView() === 'flights' ? 'flights' : 'loop'))
   const [tab, setTab] = useState<Tab>(() => (initialView() === 'flights' ? 'flights' : 'countries'))
   const [showArcs, setShowArcs] = useState(true)
@@ -112,15 +123,27 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
   const reducedMotion = useReducedMotion()
 
-  const selected = code ? atlas.byCode.get(code) ?? null : null
+  const selected = selection?.type === 'country' ? atlas.byCode.get(selection.code) ?? null : null
+  const code = selected?.code ?? null
   const stops = atlas.visited
-  const inFlights = mode === 'flights' && flightLog !== null
+
+  // Airports, busiest first: the order for prev/next stepping.
+  const airportRanking = useMemo(() => flightLog?.airports.map((a) => a.item.iata) ?? [], [flightLog])
+  const selectedAirport =
+    selection?.type === 'airport' && airportRanking.includes(selection.code) ? selection.code : null
+  const airportInfo = useMemo(
+    () => (flightLog && selectedAirport ? airportDetail(flightLog, selectedAirport) : null),
+    [flightLog, selectedAirport],
+  )
+  // Selecting an airport (including from a shared link) implies the flights view.
+  const inFlights = flightLog !== null && (mode === 'flights' || selectedAirport !== null)
   const tabs = TABS.filter((t) => t.id !== 'flights' || flightLog)
 
   const camera = useMemo<CameraTarget | null>(() => {
+    if (airportInfo) return cameraForAirport(airportInfo)
     if (selected) return cameraFor(selected)
     return resetCount > 0 ? { ...RESET_VIEW } : null
-  }, [selected, resetCount])
+  }, [airportInfo, selected, resetCount])
 
   // Running total of distance, for the replay readout.
   const kmSoFar = useMemo(() => {
@@ -131,24 +154,39 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
 
   const select = useCallback(
     (next: string | null, replace = false) => {
-      setCode(next, { replace })
+      setSelection(next ? { type: 'country', code: next } : null, { replace })
     },
-    [setCode],
+    [setSelection],
+  )
+
+  const selectAirport = useCallback(
+    (iata: string, replace = false) => {
+      setMode('flights')
+      setSelection({ type: 'airport', code: iata }, { replace })
+    },
+    [setSelection],
   )
 
   const step = useCallback(
     (delta: 1 | -1) => {
+      if (selectedAirport) {
+        const index = airportRanking.indexOf(selectedAirport)
+        const next = (index + delta + airportRanking.length) % airportRanking.length
+        selectAirport(airportRanking[next], true)
+        return
+      }
       const current = selected?.stop ? selected.stop - 1 : delta === 1 ? -1 : 0
       const next = (current + delta + stops.length) % stops.length
       setTour((t) => (t ? { ...t, index: next } : t))
       select(stops[next].code, true)
     },
-    [selected, stops, select],
+    [selected, stops, select, selectedAirport, airportRanking, selectAirport],
   )
 
   const switchMode = (next: Mode) => {
     setTour(null)
     setReplay(null)
+    if (next === 'loop' && selectedAirport) select(null, true)
     setMode(next)
     if (next === 'flights') setTab('flights')
     else if (tab === 'flights') setTab('countries')
@@ -261,13 +299,15 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
                   width={globeSize.width}
                   height={globeSize.height}
                   selected={selected}
+                  selectedAirport={selectedAirport}
                   activeLeg={activeLeg}
                   replayIndex={replay?.index ?? null}
                   showArcs={showArcs}
-                  autoRotate={!selected && !tour}
+                  autoRotate={!selected && !selectedAirport && !tour}
                   reducedMotion={reducedMotion}
                   camera={camera}
                   onSelect={(next) => select(next)}
+                  onSelectAirport={(iata) => selectAirport(iata)}
                 />
               </Suspense>
             )
@@ -278,7 +318,7 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
           )}
         </div>
 
-        <div className={`hud hud--title ${tour || replay || selected ? 'is-dim' : ''}`}>
+        <div className={`hud hud--title ${tour || replay || selected || selectedAirport ? 'is-dim' : ''}`}>
           {inFlights ? (
             <>
               <p className="eyebrow">
@@ -423,11 +463,25 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
       </section>
 
       <aside className="panel" aria-label="Atlas details">
+        {airportInfo && (
+          <AirportCard
+            detail={airportInfo}
+            rank={airportRanking.indexOf(airportInfo.airport.iata) + 1}
+            total={airportRanking.length}
+            country={atlas.countries.find((c) => c.iso2 === airportInfo.airport.country) ?? null}
+            onSelectAirport={(iata) => selectAirport(iata)}
+            onSelectCountry={(c) => select(c)}
+            onPrev={() => step(-1)}
+            onNext={() => step(1)}
+            onClose={() => select(null)}
+          />
+        )}
         {selected && (
           <CountryCard
             atlas={atlas}
             country={selected}
             flightLog={flightLog}
+            onSelectAirport={(iata) => selectAirport(iata)}
             onPrev={() => step(-1)}
             onNext={() => step(1)}
             onClose={() => (tour ? stopTour() : select(null))}
@@ -461,7 +515,12 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
             <CountryList atlas={atlas} selectedCode={code} onSelect={(c) => select(c)} searchRef={searchRef} />
           )}
           {tab === 'flights' && flightLog && (
-            <FlightsPanel log={flightLog} replayMonth={replayFlight?.month ?? null} />
+            <FlightsPanel
+              log={flightLog}
+              replayMonth={replayFlight?.month ?? null}
+              selectedAirport={selectedAirport}
+              onSelectAirport={(iata) => selectAirport(iata)}
+            />
           )}
           {tab === 'stats' && <StatsPanel atlas={atlas} onSelect={(c) => select(c)} />}
           {tab === 'engine' && <EnginePanel atlas={atlas} fetchMs={fetchMs} flights={flightsState} />}
