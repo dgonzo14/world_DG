@@ -51,6 +51,8 @@ export interface FlightLog {
     countries: number
     airlines: number
     aircraftTypes: number
+    /** Flights that ended where they started (air returns). */
+    returnedToOrigin: number
   }
   records: {
     longest: Flight
@@ -130,8 +132,12 @@ export function buildFlightLog(file: FlightsFile): FlightLog {
       return { ...f, index, origin, destination, km: haversineKm(origin, destination) }
     })
 
+  // A flight that lands back where it left (an air return) is still a flight,
+  // but it isn't a route and shouldn't count its airport twice.
+  const isReturn = (f: Flight) => f.from === f.to
   const routeMap = new Map<string, RouteTally>()
   for (const f of flights) {
+    if (isReturn(f)) continue
     const [a, b] = [f.origin, f.destination].sort((x, y) => x.iata.localeCompare(y.iata))
     const key = `${a.iata}-${b.iata}`
     const route = routeMap.get(key)
@@ -141,7 +147,7 @@ export function buildFlightLog(file: FlightsFile): FlightLog {
   const routes = [...routeMap.values()].sort((x, y) => y.count - x.count || y.km - x.km)
 
   const airports = tally(
-    flights.flatMap((f) => [f.origin, f.destination]),
+    flights.flatMap((f) => (isReturn(f) ? [f.origin] : [f.origin, f.destination])),
     (a) => a.iata,
   )
 
@@ -171,6 +177,7 @@ export function buildFlightLog(file: FlightsFile): FlightLog {
   const blockMinutes = flights.reduce((acc, f) => acc + (f.blockMin ?? 0), 0)
   const delays = flights.map((f) => f.arrDelayMin).filter((d): d is number => d !== null)
   const withBlock = flights.filter((f) => f.blockMin !== null)
+  const flown = flights.filter((f) => !isReturn(f))
 
   return {
     flights,
@@ -190,11 +197,12 @@ export function buildFlightLog(file: FlightsFile): FlightLog {
       countries: new Set(airports.map((a) => a.item.country)).size,
       airlines: airlines.length,
       aircraftTypes: aircraft.length,
+      returnedToOrigin: flights.length - flown.length,
     },
-    records: flights.length
+    records: flown.length
       ? {
-          longest: flights.reduce((best, f) => (f.km > best.km ? f : best)),
-          shortest: flights.reduce((best, f) => (f.km < best.km ? f : best)),
+          longest: flown.reduce((best, f) => (f.km > best.km ? f : best)),
+          shortest: flown.reduce((best, f) => (f.km < best.km ? f : best)),
           longestBlock: withBlock.length
             ? withBlock.reduce((best, f) => (f.blockMin! > best.blockMin! ? f : best))
             : null,
@@ -213,5 +221,48 @@ export function buildFlightLog(file: FlightsFile): FlightLog {
       : null,
     first,
     through: file.through,
+  }
+}
+
+export interface AirportDetail {
+  airport: AirportRef
+  visits: number
+  departures: number
+  arrivals: number
+  firstMonth: string
+  lastMonth: string
+  /** Airports flown to or from here, busiest first. */
+  routes: { other: AirportRef; count: number; km: number }[]
+  airlines: Tally<{ code: string; name: string }>[]
+}
+
+/** Everything the airport card needs, derived from the chronological flight list. */
+export function airportDetail(log: FlightLog, iata: string): AirportDetail | null {
+  const flights = log.flights.filter((f) => f.from === iata || f.to === iata)
+  if (flights.length === 0) return null
+  const airport = flights[0].from === iata ? flights[0].origin : flights[0].destination
+
+  const routes = new Map<string, { other: AirportRef; count: number; km: number }>()
+  for (const f of flights) {
+    const other = f.from === iata ? f.destination : f.origin
+    if (other.iata === iata) continue
+    const route = routes.get(other.iata)
+    if (route) route.count++
+    else routes.set(other.iata, { other, count: 1, km: f.km })
+  }
+  const byCode = new Map(log.airlines.map((a) => [a.item.code, a.item]))
+
+  return {
+    airport,
+    visits: flights.length,
+    departures: flights.filter((f) => f.from === iata).length,
+    arrivals: flights.filter((f) => f.to === iata).length,
+    firstMonth: flights[0].month,
+    lastMonth: flights[flights.length - 1].month,
+    routes: [...routes.values()].sort((a, b) => b.count - a.count || a.other.iata.localeCompare(b.other.iata)),
+    airlines: tally(
+      flights.map((f) => byCode.get(f.airline) ?? { code: f.airline, name: f.airline }),
+      (a) => a.code,
+    ),
   }
 }

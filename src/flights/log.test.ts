@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { aircraftFamily, buildFlightLog, monthRange } from './log'
+import { aircraftFamily, airportDetail, buildFlightLog, monthRange } from './log'
 import type { FlightEntry, FlightsFile } from './types'
 
 const airports = {
@@ -93,6 +93,56 @@ describe('buildFlightLog', () => {
 
   it('falls back to the raw code for unknown airlines', () => {
     expect(log.airlines.map((a) => a.item.name)).toContain('XXX')
+  })
+})
+
+describe('air returns (from === to)', () => {
+  const withReturn: FlightsFile = {
+    ...fixture,
+    flights: [...fixture.flights, flight({ month: '2024-04', from: 'ATL', to: 'ATL', blockMin: 106 })],
+  }
+  const log = buildFlightLog(withReturn)
+
+  it('counts as a flight but not as a route', () => {
+    expect(log.totals.flights).toBe(5)
+    expect(log.totals.returnedToOrigin).toBe(1)
+    expect(log.routes.map((r) => r.key)).not.toContain('ATL-ATL')
+  })
+
+  it('counts its airport once, not twice', () => {
+    expect(log.airports.find((a) => a.item.iata === 'ATL')?.count).toBe(5)
+    expect(airportDetail(log, 'ATL')?.visits).toBe(5)
+  })
+
+  it('never wins the shortest-hop record', () => {
+    expect(log.records?.shortest.km).toBeGreaterThan(0)
+    expect(airportDetail(log, 'ATL')?.routes.map((r) => r.other.iata)).not.toContain('ATL')
+  })
+})
+
+describe('airportDetail', () => {
+  const log = buildFlightLog(fixture)
+
+  it('counts departures, arrivals and visits separately', () => {
+    const atl = airportDetail(log, 'ATL')!
+    expect(atl).toMatchObject({ visits: 4, departures: 3, arrivals: 1, firstMonth: '2024-01', lastMonth: '2024-04' })
+  })
+
+  it('groups routes by the other airport, busiest first, both directions together', () => {
+    const atl = airportDetail(log, 'ATL')!
+    expect(atl.routes.map((r) => [r.other.iata, r.count])).toEqual([
+      ['RDU', 3],
+      ['HND', 1],
+    ])
+  })
+
+  it('lists airlines, resolving names and keeping unknown codes', () => {
+    const names = airportDetail(log, 'ATL')!.airlines.map((a) => a.item.name)
+    expect(names).toEqual(['Delta Air Lines', 'XXX'])
+  })
+
+  it('returns null for an airport with no flights', () => {
+    expect(airportDetail(log, 'LAX')).toBeNull()
   })
 })
 
