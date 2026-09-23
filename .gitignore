@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Flight import: raw exports stay local; reference datasets are re-downloadable
+scripts/.cache
+*.csv
