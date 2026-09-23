@@ -10,8 +10,16 @@
       name="description"
       content="Diego Gonzalez's travel atlas: an interactive 3D globe of every country I've visited, with a 2-opt optimized round-trip route and stats computed from spherical geometry."
     />
+    <!-- Link previews need absolute URLs: crawlers don't resolve relative paths. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://dgonzo14.github.io/world_DG/" />
     <meta property="og:title" content="DG Atlas · Diego Gonzalez" />
-    <meta property="og:description" content="Every country I've visited on a 3D globe, with an optimized round-trip route." />
+    <meta property="og:description" content="Every country I've visited on a 3D globe, with an optimized round-trip route and every route I've flown." />
+    <meta property="og:image" content="https://dgonzo14.github.io/world_DG/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A 3D globe with the 29 countries Diego Gonzalez has visited highlighted in yellow." />
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <div id="root"></div>
