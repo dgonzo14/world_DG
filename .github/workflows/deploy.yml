@@ -26,7 +26,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          # Match local development: npm 11's lockfile isn't accepted by npm 10 (Node 22).
+          # Same Node as local development (see .nvmrc).
           node-version-file: .nvmrc
           cache: npm
 
