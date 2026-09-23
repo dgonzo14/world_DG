@@ -3,12 +3,16 @@ import { describe, expect, it } from 'vitest'
 import visitedCountries from '../data/visitedCountries'
 import { HOME } from '../data/home'
 import { buildAtlas, featureCode, featureIso2, type FeatureCollection } from './atlas'
+import { haversineKm } from './sphere'
+import { decodeCountries } from './topology'
 
-// Integration tests run against the real dataset that ships with the site.
-const collection = JSON.parse(
-  readFileSync(new URL('../../public/data/countries.geojson', import.meta.url), 'utf8'),
-) as FeatureCollection
+// Integration tests run against the real dataset that ships with the site (the
+// TopoJSON), cross-checked against the full-precision GeoJSON it's built from.
+const read = (path: string) => JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'))
+const collection = decodeCountries(read('../../public/data/countries.topo.json'))
+const source = read('../../data/countries.geojson') as FeatureCollection
 const atlas = buildAtlas(collection, visitedCountries, HOME)
+const sourceAtlas = buildAtlas(source, visitedCountries, HOME)
 
 describe('featureCode', () => {
   it('falls back past Natural Earth "-99" placeholders', () => {
@@ -68,6 +72,18 @@ describe('buildAtlas (real dataset)', () => {
     expect(stops).toEqual(Array.from({ length: atlas.totals.visited }, (_, i) => i + 1))
     expect(atlas.route.legs).toHaveLength(atlas.totals.visited + 1)
     expect(atlas.route.totalKm).toBeLessThanOrEqual(atlas.route.greedyKm)
+  })
+
+  it('survives TopoJSON quantization (area within 0.5%, center within 1% of the country’s size)', () => {
+    expect(atlas.countries).toHaveLength(sourceAtlas.countries.length)
+    for (const original of sourceAtlas.countries) {
+      const decoded = atlas.byCode.get(original.code)!
+      expect(Math.abs(decoded.areaKm2 - original.areaKm2) / original.areaKm2).toBeLessThan(0.005)
+      // A fixed tolerance is wrong for both Vatican-sized and Russia-sized shapes:
+      // scale it by the country's linear size (√area), with a 5 km floor.
+      const shiftKm = haversineKm(decoded.center, original.center)
+      expect(shiftKm).toBeLessThan(Math.max(5, 0.01 * Math.sqrt(original.areaKm2)))
+    }
   })
 
   it('keeps shares between 0 and 1', () => {
