@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Globe, { type GlobeMethods } from 'react-globe.gl'
 import { Color, MeshPhongMaterial } from 'three'
 import type { FlightLog } from '../flights/log'
+import type { FlightNetwork } from '../flights/network'
 import type { Atlas, Country } from '../geo/atlas'
 import type { LatLng } from '../geo/sphere'
 import { escapeHtml, formatKm, pad2 } from '../lib/format'
@@ -14,6 +15,9 @@ export type Mode = 'loop' | 'flights'
 
 interface Props {
   atlas: Atlas
+  /** Public route network (airports + unique routes, no frequency). */
+  network: FlightNetwork | null
+  /** Detailed log, present only when unlocked: adds counts, sizes and replay. */
   flightLog: FlightLog | null
   mode: Mode
   width: number
@@ -67,6 +71,9 @@ interface AirportPoint extends LatLng {
   iata: string
   name: string
   city: string
+  /** Distinct destinations (public). */
+  degree: number
+  /** Chronological flight indices; empty when the log is locked. */
   firstFlight: number
   flights: number[]
 }
@@ -129,6 +136,7 @@ function tooltip(country: Country) {
 
 export default function GlobeView({
   atlas,
+  network,
   flightLog,
   mode,
   width,
@@ -147,8 +155,9 @@ export default function GlobeView({
   const globeRef = useRef<GlobeMethods | undefined>(undefined)
   const [ready, setReady] = useState(false)
   const [hovered, setHovered] = useState<Country | null>(null)
-  const flights = mode === 'flights' && flightLog ? flightLog : null
-  const replaying = flights !== null && replayIndex !== null
+  const flights = mode === 'flights' && network ? network : null
+  const log = flights ? flightLog : null
+  const replaying = log !== null && replayIndex !== null
   const limit = replaying ? replayIndex : Infinity
 
   // --- Static datasets (stable object identity so the globe diffs cheaply) ---
@@ -170,27 +179,33 @@ export default function GlobeView({
     }))
   }, [atlas])
 
-  const routeArcs = useMemo<RouteArc[]>(() => {
-    if (!flightLog) return []
+  // Flight indices per route and per airport, from the unlocked log only.
+  const flightsByRoute = useMemo(() => {
     const byKey = new Map<string, number[]>()
-    for (const f of flightLog.flights) {
+    for (const f of flightLog?.flights ?? []) {
       if (f.from === f.to) continue
       const key = [f.from, f.to].sort().join('-')
       if (!byKey.has(key)) byKey.set(key, [])
       byKey.get(key)!.push(f.index)
     }
-    return flightLog.routes.map((r) => ({
-      kind: 'route',
-      key: r.key,
-      startLat: r.a.lat,
-      startLng: r.a.lng,
-      endLat: r.b.lat,
-      endLng: r.b.lng,
-      km: r.km,
-      label: `${r.a.iata} ⇄ ${r.b.iata}`,
-      flights: byKey.get(r.key) ?? [],
-    }))
+    return byKey
   }, [flightLog])
+
+  const routeArcs = useMemo<RouteArc[]>(
+    () =>
+      (network?.routes ?? []).map((r) => ({
+        kind: 'route',
+        key: r.key,
+        startLat: r.a.lat,
+        startLng: r.a.lng,
+        endLat: r.b.lat,
+        endLng: r.b.lng,
+        km: r.km,
+        label: `${r.a.iata} ⇄ ${r.b.iata}`,
+        flights: flightsByRoute.get(r.key) ?? [],
+      })),
+    [network, flightsByRoute],
+  )
 
   const cometArcs = useMemo<CometArc[]>(
     () =>
@@ -206,21 +221,29 @@ export default function GlobeView({
   )
 
   const airportPoints = useMemo<AirportPoint[]>(() => {
-    if (!flightLog) return []
-    const byCode = new Map<string, AirportPoint>()
-    for (const f of flightLog.flights) {
+    if (!network) return []
+    const byCode = new Map<string, number[]>()
+    for (const f of flightLog?.flights ?? []) {
       // An air return (from === to) is one visit, not two.
-      for (const ap of f.from === f.to ? [f.origin] : [f.origin, f.destination]) {
-        let point = byCode.get(ap.iata)
-        if (!point) {
-          point = { iata: ap.iata, name: ap.name, city: ap.city, lat: ap.lat, lng: ap.lng, firstFlight: f.index, flights: [] }
-          byCode.set(ap.iata, point)
-        }
-        point.flights.push(f.index)
+      for (const iata of f.from === f.to ? [f.from] : [f.from, f.to]) {
+        if (!byCode.has(iata)) byCode.set(iata, [])
+        byCode.get(iata)!.push(f.index)
       }
     }
-    return [...byCode.values()]
-  }, [flightLog])
+    return network.airports.map((ap) => {
+      const indices = byCode.get(ap.iata) ?? []
+      return {
+        iata: ap.iata,
+        name: ap.name,
+        city: ap.city,
+        lat: ap.lat,
+        lng: ap.lng,
+        degree: network.degree.get(ap.iata) ?? 0,
+        firstFlight: indices[0] ?? 0,
+        flights: indices,
+      }
+    })
+  }, [network, flightLog])
 
   // --- What's visible right now -----------------------------------------------
   const arcs = useMemo<Arc[]>(() => {
@@ -239,34 +262,35 @@ export default function GlobeView({
 
   // Resting labels for the busiest few only; the rest reveal on hover, which keeps
   // the dense US cluster readable.
-  const topAirports = useMemo(
-    () => (flightLog ? new Set(flightLog.airports.slice(0, 6).map((a) => a.item.iata)) : new Set<string>()),
-    [flightLog],
-  )
+  const topAirports = useMemo(() => {
+    // Busiest by visits when unlocked; most connected (a public fact) otherwise.
+    const ranked = flightLog ? flightLog.airports.map((a) => a.item.iata) : (network?.airports ?? []).map((a) => a.iata)
+    return new Set(ranked.slice(0, 6))
+  }, [flightLog, network])
 
   // Airports one hop from the selected airport.
   const connected = useMemo(() => {
     const set = new Set<string>()
-    if (!flightLog || !selectedAirport) return set
-    for (const r of flightLog.routes) {
+    if (!network || !selectedAirport) return set
+    for (const r of network.routes) {
       if (r.a.iata === selectedAirport) set.add(r.b.iata)
       if (r.b.iata === selectedAirport) set.add(r.a.iata)
     }
     return set
-  }, [flightLog, selectedAirport])
+  }, [network, selectedAirport])
 
   const markers = useMemo<Marker[]>(() => {
     const list: Marker[] = []
     if (!flights) list.push({ ...atlas.home, kind: 'home', text: atlas.home.code })
     if (selected) list.push({ ...selected.center, kind: 'selected', text: selected.code })
     if (replaying) {
-      const f = flights.flights[limit]
+      const f = log.flights[limit]
       if (f) list.push({ lat: f.destination.lat, lng: f.destination.lng, kind: 'arrival', text: f.to })
     }
     const airport = flights && selectedAirport ? airportPoints.find((p) => p.iata === selectedAirport) : null
     if (airport) list.push({ lat: airport.lat, lng: airport.lng, kind: 'airport', text: airport.iata })
     return list
-  }, [atlas.home, selected, flights, replaying, limit, selectedAirport, airportPoints])
+  }, [atlas.home, selected, flights, log, replaying, limit, selectedAirport, airportPoints])
 
   // Airports carry their own HTML labels, so the text layer is only for home.
   const labels = useMemo(() => (flights ? [] : markers.filter((m) => m.kind === 'home')), [flights, markers])
@@ -281,23 +305,27 @@ export default function GlobeView({
   useEffect(() => {
     onSelectAirportRef.current = onSelectAirport
     applyRef.current = (el, p) => {
-      const n = countUpTo(p.flights, limit)
+      // Unlocked: size and label by visits. Public: by distinct destinations only.
+      const n = log ? countUpTo(p.flights, limit) : null
       const isSelected = p.iata === selectedAirport
       const isConnected = connected.has(p.iata)
-      el.style.setProperty('--size', `${Math.min(18, 5 + 1.5 * Math.sqrt(n)).toFixed(1)}px`)
+      const size = n !== null ? 5 + 1.5 * Math.sqrt(n) : 5 + 1.1 * Math.sqrt(p.degree)
+      const detail =
+        n !== null ? `${n} ${n === 1 ? 'visit' : 'visits'}` : `${p.degree} ${p.degree === 1 ? 'route' : 'routes'}`
+      el.style.setProperty('--size', `${Math.min(18, size).toFixed(1)}px`)
       el.classList.toggle('is-selected', isSelected)
       el.classList.toggle('is-connected', isConnected)
       el.classList.toggle('is-dim', Boolean(selectedAirport) && !isSelected && !isConnected)
       el.classList.toggle('is-top', topAirports.has(p.iata))
-      el.querySelector('.ap__count')!.textContent = `${n} ${n === 1 ? 'visit' : 'visits'}`
-      el.setAttribute('aria-label', `${p.iata}, ${p.name}, ${p.city}: ${n} ${n === 1 ? 'visit' : 'visits'}`)
+      el.querySelector('.ap__count')!.textContent = detail
+      el.setAttribute('aria-label', `${p.iata}, ${p.name}, ${p.city}: ${detail}`)
       el.setAttribute('aria-pressed', String(isSelected))
     }
     for (const p of airportPoints) {
       const el = elements.current.get(p.iata)
       if (el) applyRef.current(el, p)
     }
-  }, [onSelectAirport, limit, selectedAirport, connected, topAirports, airportPoints])
+  }, [onSelectAirport, log, limit, selectedAirport, connected, topAirports, airportPoints])
 
   const airportElement = useCallback((obj: object) => {
     const p = obj as AirportPoint
@@ -386,7 +414,8 @@ export default function GlobeView({
     [selected, hovered],
   )
 
-  const routeCount = useCallback((arc: RouteArc) => countUpTo(arc.flights, limit), [limit])
+  /** Flights on a route so far, or null when the log is locked (public view has no counts). */
+  const routeCount = useCallback((arc: RouteArc) => (log ? countUpTo(arc.flights, limit) : null), [log, limit])
   const touches = useCallback(
     (arc: RouteArc) => Boolean(selectedAirport) && arc.key.split('-').includes(selectedAirport!),
     [selectedAirport],
@@ -398,7 +427,9 @@ export default function GlobeView({
       if (arc.kind === 'comet') return ['rgba(255, 243, 196, 0)', COLORS.arcActive]
       if (arc.kind === 'route') {
         if (selectedAirport) return touches(arc) ? COLORS.arcActive : 'rgba(255, 196, 37, 0.07)'
-        const alpha = 0.35 + 0.55 * Math.min(1, routeCount(arc) / 12)
+        const n = routeCount(arc)
+        if (n === null) return 'rgba(255, 196, 37, 0.6)'
+        const alpha = 0.35 + 0.55 * Math.min(1, n / 12)
         return `rgba(255, 196, 37, ${alpha.toFixed(2)})`
       }
       if (activeLeg === null) return [COLORS.arcFrom, COLORS.arcTo]
@@ -412,7 +443,8 @@ export default function GlobeView({
       const arc = asArc(obj)
       if (arc.kind === 'comet') return 0.9
       if (arc.kind === 'route') {
-        const base = 0.18 + 0.16 * Math.sqrt(routeCount(arc))
+        const n = routeCount(arc)
+        const base = n === null ? 0.32 : 0.18 + 0.16 * Math.sqrt(n)
         return selectedAirport && touches(arc) ? base + 0.35 : base
       }
       return arc.index === activeLeg ? 1.1 : 0.6
@@ -426,7 +458,9 @@ export default function GlobeView({
       if (arc.kind === 'comet') return ''
       if (arc.kind === 'route') {
         const n = routeCount(arc)
-        return `<div class="tip"><span class="tip__code">${escapeHtml(arc.label)}</span><span class="tip__name">${n} ${n === 1 ? 'flight' : 'flights'}</span><span class="tip__status">${formatKm(arc.km)} each way</span></div>`
+        const title = n === null ? escapeHtml(arc.label) : `${n} ${n === 1 ? 'flight' : 'flights'}`
+        const code = n === null ? 'Route' : escapeHtml(arc.label)
+        return `<div class="tip"><span class="tip__code">${code}</span><span class="tip__name">${title}</span><span class="tip__status">${formatKm(arc.km)} each way</span></div>`
       }
       return `<div class="tip"><span class="tip__code">Leg ${pad2(arc.index + 1)}</span><span class="tip__name">${escapeHtml(arc.label)}</span><span class="tip__status">${formatKm(arc.km)}</span></div>`
     },

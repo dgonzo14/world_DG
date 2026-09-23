@@ -1317,6 +1317,83 @@ kbd {
   color: var(--muted);
 }
 
+/* ---------- Unlock form ---------- */
+.unlock {
+  margin-top: 28px;
+  padding: 16px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--ink-3);
+}
+.unlock__head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.unlock__icon {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  color: var(--signal);
+}
+.unlock h3 {
+  font: 700 1.1rem/1.1 var(--f-display);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.unlock__head p {
+  margin-top: 4px;
+  font-size: 0.86rem;
+  color: var(--paper-dim);
+}
+.unlock__field {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.unlock__field input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 1.5px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--ink);
+  font: 500 0.95rem/1 var(--f-mono);
+  letter-spacing: 0.08em;
+}
+.unlock__field input:focus {
+  outline: none;
+  border-color: var(--signal);
+}
+.unlock__field input[aria-invalid='true'] {
+  border-color: var(--red);
+}
+.unlock__field .btn[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+.unlock__status {
+  margin-top: 8px;
+  font: 500 0.7rem/1.4 var(--f-mono);
+  color: var(--muted);
+}
+.unlock__field:has(input[aria-invalid='true']) + .unlock__status {
+  color: #f08a78;
+}
+.unlocked {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.unlocked .btn {
+  flex: none;
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 0.85rem;
+}
+
 /* ---------- Horizontal bars ---------- */
 .hbars {
   display: grid;

@@ -1,10 +1,13 @@
 import type { FlightLog } from '../flights/log'
+import type { FlightNetwork } from '../flights/network'
 import type { Atlas, Country } from '../geo/atlas'
 import { formatCompact, formatKm, formatKm2, formatLatLng, pad2 } from '../lib/format'
 
 interface Props {
   atlas: Atlas
   country: Country
+  network: FlightNetwork | null
+  /** Present only when unlocked; adds visit counts. */
   flightLog: FlightLog | null
   onSelectAirport: (iata: string) => void
   onPrev: () => void
@@ -12,10 +15,21 @@ interface Props {
   onClose: () => void
 }
 
-export default function CountryCard({ atlas, country, flightLog, onSelectAirport, onPrev, onNext, onClose }: Props) {
-  // Join airports to the country by ISO alpha-2.
-  const airports = flightLog?.airports.filter((a) => a.item.country === country.iso2) ?? []
-  const airportVisits = airports.reduce((acc, a) => acc + a.count, 0)
+export default function CountryCard({
+  atlas,
+  country,
+  network,
+  flightLog,
+  onSelectAirport,
+  onPrev,
+  onNext,
+  onClose,
+}: Props) {
+  // Join airports to the country by ISO alpha-2. Counts only when unlocked.
+  const airports: { item: { iata: string; name: string; city: string }; count?: number }[] = flightLog
+    ? flightLog.airports.filter((a) => a.item.country === country.iso2)
+    : (network?.airports ?? []).filter((a) => a.country === country.iso2).map((item) => ({ item }))
+  const airportVisits = flightLog ? airports.reduce((acc, a) => acc + (a.count ?? 0), 0) : null
   const total = atlas.totals.visited
   const previous = country.stop ? (country.stop === 1 ? null : atlas.visited[country.stop - 2]) : null
   const legKm = country.stop ? atlas.route.legs[country.stop - 1]?.km : null
@@ -58,7 +72,9 @@ export default function CountryCard({ atlas, country, flightLog, onSelectAirport
         {airports.length > 0 && (
           <div className="card__wide">
             <dt>
-              Airports · {airportVisits} {airportVisits === 1 ? 'visit' : 'visits'}
+              {airportVisits === null
+                ? `Airports · ${airports.length}`
+                : `Airports · ${airportVisits} ${airportVisits === 1 ? 'visit' : 'visits'}`}
             </dt>
             <dd className="card__airports">
               {airports.slice(0, 6).map((a) => (
@@ -68,7 +84,7 @@ export default function CountryCard({ atlas, country, flightLog, onSelectAirport
                   title={`${a.item.name}, ${a.item.city}`}
                   onClick={() => onSelectAirport(a.item.iata)}
                 >
-                  {a.item.iata} <small>{a.count}</small>
+                  {a.item.iata} {a.count !== undefined && <small>{a.count}</small>}
                 </button>
               ))}
               {airports.length > 6 && <span>+{airports.length - 6}</span>}

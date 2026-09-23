@@ -17,7 +17,7 @@ export default function EnginePanel({ atlas, fetchMs, flights }: Props) {
 
   // Cross-check the two datasets: every airport's country should be on the visited list.
   const visitedIso2 = new Set(atlas.visited.map((c) => c.iso2))
-  const airportCountries = flights ? [...new Set(flights.log.airports.map((a) => a.item.country))] : []
+  const airportCountries = flights ? [...new Set(flights.network.airports.map((a) => a.country))] : []
   const unlisted = airportCountries.filter((iso2) => !visitedIso2.has(iso2))
 
   const modules = [
@@ -54,9 +54,9 @@ export default function EnginePanel({ atlas, fetchMs, flights }: Props) {
           {
             title: 'Flight log pipeline',
             file: 'scripts/import-flighty.ts',
-            body: 'A build-time script parses my Flighty CSV export, joins each airport to OurAirports coordinates and OpenFlights IANA time zones, and converts local gate times to UTC (DST-aware) for block time and delay. It publishes only month, route, airline and aircraft: no flight numbers, no exact dates, and nothing scheduled in the future.',
-            formula: 'local gate time + IANA zone → UTC → block minutes',
-            metric: `${flights.log.totals.flights} flights · ${flights.log.totals.airports} airports · ${flights.log.totals.routes} routes · aggregated in ${formatMs(flights.buildMs)} · airports in ${airportCountries.length} countries, ${unlisted.length ? `not on the visited list: ${unlisted.join(', ')}` : 'all on the visited list'}`,
+            body: 'A build-time script parses my Flighty CSV export, joins each airport to OurAirports coordinates and OpenFlights IANA time zones, and converts local gate times to UTC (DST-aware) for block time and delay. It publishes two files: a public one with only airports and unique routes (alphabetical, so not even the order hints at frequency), and the detailed log encrypted with AES-256-GCM under a PBKDF2-derived key. Future flights are dropped before either is written.',
+            formula: 'code → PBKDF2-SHA256 (600k) → AES-256-GCM key',
+            metric: `${flights.network.totals.airports} airports · ${flights.network.totals.routes} routes${flights.log ? ` · ${flights.log.totals.flights} flights decrypted` : ' · detailed log locked'} · ${formatMs(flights.buildMs)} · airports in ${airportCountries.length} countries, ${unlisted.length ? `not on the visited list: ${unlisted.join(', ')}` : 'all on the visited list'}`,
           },
         ]
       : []),
@@ -95,7 +95,7 @@ export default function EnginePanel({ atlas, fetchMs, flights }: Props) {
         <ul>
           <li>TypeScript in strict mode across the app and geometry library</li>
           <li>Vitest unit tests for area, distance, centroid, 2-opt, CSV parsing and time zones, plus integration tests on the real datasets</li>
-          <li>A test asserts the published flight file contains only the whitelisted, month-precision fields</li>
+          <li>Tests enforce the privacy boundary: the public file is identical however often a route was flown, and the vault never holds plaintext</li>
           <li>ESLint with typescript-eslint and the React hooks rules</li>
           <li>GitHub Actions runs type-check, lint and tests before every Pages deploy</li>
         </ul>

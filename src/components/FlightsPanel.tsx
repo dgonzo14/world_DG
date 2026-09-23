@@ -1,13 +1,19 @@
 import type { FlightLog } from '../flights/log'
 import { ON_TIME_MIN } from '../flights/log'
+import type { FlightNetwork } from '../flights/network'
 import { formatCompact, formatDuration, formatKm, formatMonth, formatPercent } from '../lib/format'
 import MonthlyChart from './MonthlyChart'
+import UnlockForm from './UnlockForm'
 
 interface Props {
-  log: FlightLog
+  network: FlightNetwork
+  /** Present only when unlocked. */
+  log: FlightLog | null
   replayMonth: string | null
   selectedAirport: string | null
   onSelectAirport: (iata: string) => void
+  onUnlock: (code: string) => Promise<void>
+  onLock: () => void
 }
 
 interface BarRow {
@@ -69,16 +75,94 @@ function Bars({
   )
 }
 
-export default function FlightsPanel({ log, replayMonth, selectedAirport, onSelectAirport }: Props) {
+function AirportChips({
+  airports,
+  selectedAirport,
+  onSelectAirport,
+}: {
+  airports: { iata: string; name: string; city: string; count?: number }[]
+  selectedAirport: string | null
+  onSelectAirport: (iata: string) => void
+}) {
+  return (
+    <ul className="ap-chips">
+      {airports.map((a) => (
+        <li key={a.iata}>
+          <button
+            type="button"
+            aria-pressed={selectedAirport === a.iata}
+            title={`${a.name}, ${a.city}`}
+            onClick={() => onSelectAirport(a.iata)}
+          >
+            {a.iata} {a.count !== undefined && <small>{a.count}</small>}
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** What anyone can see: the route network, with no frequency or dates. */
+function PublicFlights({ network, selectedAirport, onSelectAirport, onUnlock }: Omit<Props, 'log' | 'replayMonth' | 'onLock'>) {
+  const { totals } = network
+  const longest = [...network.routes].sort((a, b) => b.km - a.km).slice(0, 6)
+  const alphabetical = [...network.airports].sort((a, b) => a.iata.localeCompare(b.iata))
+  return (
+    <div className="stats">
+      <p className="muted">Every airport and route in my flight log. Select any airport to see where it connects.</p>
+      <div className="tiles">
+        <div className="tile">
+          <b>{totals.airports}</b>
+          <span>airports in {totals.countries} countries</span>
+        </div>
+        <div className="tile">
+          <b>{totals.routes}</b>
+          <span>distinct routes flown</span>
+        </div>
+      </div>
+
+      <section aria-labelledby="longest-title">
+        <h3 id="longest-title" className="h-mono">Longest routes</h3>
+        <Bars
+          unit="km"
+          rows={longest.map((r) => ({
+            key: r.key,
+            label: `${r.a.iata} ⇄ ${r.b.iata}`,
+            detail: `${r.a.city} · ${r.b.city}`,
+            value: Math.round(r.km),
+          }))}
+        />
+      </section>
+
+      <section aria-labelledby="all-airports-title">
+        <h3 id="all-airports-title" className="h-mono">
+          All {totals.airports} airports
+        </h3>
+        <AirportChips airports={alphabetical} selectedAirport={selectedAirport} onSelectAirport={onSelectAirport} />
+      </section>
+
+      <UnlockForm onUnlock={onUnlock} />
+    </div>
+  )
+}
+
+export default function FlightsPanel(props: Props) {
+  const { log, replayMonth, selectedAirport, onSelectAirport, onLock } = props
+  if (!log) return <PublicFlights {...props} />
   const { totals, records, punctuality } = log
   const otherAirlines = log.airlines.slice(5).reduce((acc, a) => acc + a.count, 0)
 
   return (
     <div className="stats">
-      <p className="muted">
-        Every flight in my Flighty log from {formatMonth(log.first)} to {formatMonth(log.through)}. Distances are great
-        circles between airports; time is gate to gate, converted to UTC.
-      </p>
+      <div className="unlocked">
+        <p className="muted">
+          Every flight in my Flighty log from {formatMonth(log.first)} to {formatMonth(log.through)}. Distances are
+          great circles between airports; time is gate to gate, converted to UTC.
+        </p>
+        <button type="button" className="btn btn--ghost" onClick={onLock}>
+          Lock
+        </button>
+      </div>
 
       <div className="tiles">
         <div className="tile">
@@ -142,20 +226,11 @@ export default function FlightsPanel({ log, replayMonth, selectedAirport, onSele
         <h3 id="all-airports-title" className="h-mono">
           All {log.airports.length} airports
         </h3>
-        <ul className="ap-chips">
-          {log.airports.map((a) => (
-            <li key={a.item.iata}>
-              <button
-                type="button"
-                aria-pressed={selectedAirport === a.item.iata}
-                title={`${a.item.name}, ${a.item.city}`}
-                onClick={() => onSelectAirport(a.item.iata)}
-              >
-                {a.item.iata} <small>{a.count}</small>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <AirportChips
+          airports={log.airports.map((a) => ({ ...a.item, count: a.count }))}
+          selectedAirport={selectedAirport}
+          onSelectAirport={onSelectAirport}
+        />
       </section>
 
       <section aria-labelledby="fleet-title">

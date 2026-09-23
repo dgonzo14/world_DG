@@ -1,10 +1,10 @@
-import type { AirportDetail } from '../flights/log'
+import type { AirportSummary } from '../flights/network'
 import type { Country } from '../geo/atlas'
 import { formatKm, formatMonth } from '../lib/format'
 
 interface Props {
-  detail: AirportDetail
-  /** Rank by visits, 1-based, and how many airports there are. */
+  detail: AirportSummary
+  /** 1-based position in the prev/next order, and how many airports there are. */
   rank: number
   total: number
   country: Country | null
@@ -28,19 +28,19 @@ export default function AirportCard({
   onNext,
   onClose,
 }: Props) {
-  const { airport, routes } = detail
-  const maxCount = Math.max(...routes.map((r) => r.count), 1)
-  const firstAndLast =
-    detail.firstMonth === detail.lastMonth
-      ? formatMonth(detail.firstMonth)
-      : `${formatMonth(detail.firstMonth)} – ${formatMonth(detail.lastMonth)}`
+  const { airport, destinations, stats } = detail
+  // Unlocked: bars by flights. Public: bars by distance (no frequency shown).
+  const barValue = (d: (typeof destinations)[number]) => d.count ?? d.km
+  const maxBar = Math.max(...destinations.map(barValue), 1)
 
   return (
     <article className="card card--visited card--airport" aria-labelledby="card-title">
       <header className="card__head">
         <span className="card__code">{airport.iata}</span>
         <span className="badge badge--visited">
-          #{rank} of {total} · {detail.visits} {detail.visits === 1 ? 'visit' : 'visits'}
+          {stats
+            ? `#${rank} of ${total} · ${stats.visits} ${stats.visits === 1 ? 'visit' : 'visits'}`
+            : `${destinations.length} ${destinations.length === 1 ? 'route' : 'routes'}`}
         </span>
         <button type="button" className="icon-btn card__close" onClick={onClose} aria-label="Close airport details">
           ×
@@ -62,59 +62,71 @@ export default function AirportCard({
         )}
       </p>
 
-      <dl className="card__grid">
-        <div>
-          <dt>Departures</dt>
-          <dd>{detail.departures}</dd>
-        </div>
-        <div>
-          <dt>Arrivals</dt>
-          <dd>{detail.arrivals}</dd>
-        </div>
-        <div>
-          <dt>Destinations</dt>
-          <dd>{routes.length}</dd>
-        </div>
-        <div>
-          <dt>Airlines</dt>
-          <dd title={detail.airlines.map((a) => a.item.name).join(', ')}>
-            {detail.airlines.length === 1 ? detail.airlines[0].item.name : detail.airlines.length}
-          </dd>
-        </div>
-        <div className="card__wide">
-          <dt>{detail.firstMonth === detail.lastMonth ? 'Visited' : 'First and latest visit'}</dt>
-          <dd>{firstAndLast}</dd>
-        </div>
-      </dl>
+      {stats && (
+        <dl className="card__grid">
+          <div>
+            <dt>Departures</dt>
+            <dd>{stats.departures}</dd>
+          </div>
+          <div>
+            <dt>Arrivals</dt>
+            <dd>{stats.arrivals}</dd>
+          </div>
+          <div>
+            <dt>Destinations</dt>
+            <dd>{destinations.length}</dd>
+          </div>
+          <div>
+            <dt>Airlines</dt>
+            <dd title={stats.airlines.map((a) => a.name).join(', ')}>
+              {stats.airlines.length === 1 ? stats.airlines[0].name : stats.airlines.length}
+            </dd>
+          </div>
+          <div className="card__wide">
+            <dt>{stats.firstMonth === stats.lastMonth ? 'Visited' : 'First and latest visit'}</dt>
+            <dd>
+              {stats.firstMonth === stats.lastMonth
+                ? formatMonth(stats.firstMonth)
+                : `${formatMonth(stats.firstMonth)} – ${formatMonth(stats.lastMonth)}`}
+            </dd>
+          </div>
+        </dl>
+      )}
 
-      <h3 className="card__sub">Routes from here</h3>
+      <h3 className="card__sub">{stats ? 'Routes from here' : 'Routes from here, longest first'}</h3>
       <ul className="routes-list">
-        {routes.slice(0, MAX_ROUTES).map((r) => (
-          <li key={r.other.iata}>
+        {destinations.slice(0, MAX_ROUTES).map((d) => (
+          <li key={d.other.iata}>
             <button
               type="button"
               className="routes-list__row"
-              onClick={() => onSelectAirport(r.other.iata)}
-              aria-label={`${r.other.iata}, ${r.other.city}: ${r.count} ${r.count === 1 ? 'flight' : 'flights'}, ${formatKm(r.km)}`}
+              onClick={() => onSelectAirport(d.other.iata)}
+              aria-label={`${d.other.iata}, ${d.other.city}: ${
+                d.count !== undefined ? `${d.count} ${d.count === 1 ? 'flight' : 'flights'}, ` : ''
+              }${formatKm(d.km)}`}
             >
-              <span className="routes-list__code">{r.other.iata}</span>
-              <span className="routes-list__city">{r.other.city}</span>
+              <span className="routes-list__code">{d.other.iata}</span>
+              <span className="routes-list__city">{d.other.city}</span>
               <span className="routes-list__track" aria-hidden="true">
-                <span style={{ width: `${(r.count / maxCount) * 100}%` }} />
+                <span style={{ width: `${(barValue(d) / maxBar) * 100}%` }} />
               </span>
-              <span className="routes-list__count">{r.count}</span>
+              <span className="routes-list__count">
+                {d.count !== undefined ? d.count : `${Math.round(d.km / 100) / 10}k`}
+              </span>
             </button>
           </li>
         ))}
       </ul>
-      {routes.length > MAX_ROUTES && <p className="card__more">+{routes.length - MAX_ROUTES} more on the globe</p>}
+      {destinations.length > MAX_ROUTES && (
+        <p className="card__more">+{destinations.length - MAX_ROUTES} more on the globe</p>
+      )}
 
       <footer className="card__nav">
         <button type="button" className="btn btn--ghost" onClick={onPrev} aria-label="Previous airport">
           ← Prev
         </button>
         <span className="card__hint">
-          <kbd>←</kbd> <kbd>→</kbd> by visits · <kbd>Esc</kbd> close
+          <kbd>←</kbd> <kbd>→</kbd> {stats ? 'by visits' : 'by routes'} · <kbd>Esc</kbd> close
         </span>
         <button type="button" className="btn btn--ghost" onClick={onNext} aria-label="Next airport">
           Next →

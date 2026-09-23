@@ -1,28 +1,54 @@
 /**
- * Flighty CSV → public/data/flights.json
+ * Flighty CSV → public/data/flights.public.json + public/data/flights.vault.json
  *
- *   npm run import:flights -- ~/Downloads/FlightyExport-2026-09-23.csv
+ *   FLIGHTS_CODE=… npm run import:flights -- ~/Downloads/FlightyExport.csv
+ *   (or omit FLIGHTS_CODE to be prompted without echo)
  *
  * Joins each flight to airport coordinates (OurAirports) and IANA time zones
  * (OpenFlights), converts local gate times to UTC for block time and delay,
- * and writes a deliberately coarse public file:
+ * then writes two files:
  *
+ *   flights.public.json  airports + unique routes only, alphabetical, no counts or dates
+ *   flights.vault.json   the detailed log, AES-256-GCM encrypted (see src/flights/vault.ts)
+ *
+ * Before either is written:
  *   - flights scheduled after today are dropped (no future travel plans online)
  *   - dates are truncated to the month
  *   - flight numbers, gates, terminals, seats, booking codes and Flighty IDs are dropped
  *
- * The raw export never leaves your machine.
+ * The raw export and the access code never leave your machine.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createInterface } from 'node:readline'
 import { parseCsv, parseCsvRecords } from '../src/flights/csv.ts'
+import { toPublicFile } from '../src/flights/network.ts'
 import { zonedTimeToUtc } from '../src/flights/time.ts'
 import type { AirportRef, FlightEntry, FlightsFile } from '../src/flights/types.ts'
+import { seal } from '../src/flights/vault.ts'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const CACHE = join(ROOT, 'scripts', '.cache')
-const OUT = join(ROOT, 'public', 'data', 'flights.json')
+const PUBLIC_OUT = join(ROOT, 'public', 'data', 'flights.public.json')
+const VAULT_OUT = join(ROOT, 'public', 'data', 'flights.vault.json')
+
+/** Read the access code from FLIGHTS_CODE, or prompt for it without echoing. */
+async function accessCode(): Promise<string> {
+  const fromEnv = process.env.FLIGHTS_CODE?.trim()
+  if (fromEnv) return fromEnv
+  if (!process.stdin.isTTY) throw new Error('Set FLIGHTS_CODE, or run in a terminal to be prompted.')
+  const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true })
+  // Suppress echo: overwrite readline's output while the code is typed.
+  const write = (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput
+  ;(rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput = (text: string) => {
+    if (text.includes('Access code')) write.call(rl, text)
+  }
+  const code = await new Promise<string>((done) => rl.question('Access code for the detailed log: ', done))
+  rl.close()
+  process.stdout.write('\n')
+  return code.trim()
+}
 
 const SOURCES = {
   ourairports: 'https://davidmegginson.github.io/ourairports-data/airports.csv',
@@ -186,11 +212,26 @@ async function main() {
     airlines: Object.fromEntries([...usedAirlines].sort().map((code) => [code, AIRLINES[code] ?? code])),
     flights,
   }
-  writeFileSync(OUT, JSON.stringify(file) + '\n')
+  const code = await accessCode()
+  if (code.length < 12) {
+    console.warn(
+      'warn: codes under 12 characters can be brute-forced offline from the public vault file. ' +
+        'Prefer something like XXXX-XXXX-XXXX from a password manager.',
+    )
+  }
+  const publicFile = toPublicFile(file)
+  writeFileSync(PUBLIC_OUT, JSON.stringify(publicFile) + '\n')
+  writeFileSync(VAULT_OUT, JSON.stringify(await seal(JSON.stringify(file), code)) + '\n')
 
   for (const w of new Set(warnings)) console.warn(`warn: ${w}`)
   console.log(
-    `Wrote ${OUT}\n  ${flights.length} flights · ${Object.keys(publicAirports).length} airports · ${usedAirlines.size} airlines\n  excluded: ${future} future, ${canceled} canceled`,
+    [
+      `Wrote ${PUBLIC_OUT}`,
+      `  public: ${Object.keys(publicFile.airports).length} airports · ${publicFile.routes.length} routes (no counts or dates)`,
+      `Wrote ${VAULT_OUT}`,
+      `  encrypted: ${flights.length} flights · ${usedAirlines.size} airlines`,
+      `  excluded before writing: ${future} future, ${canceled} canceled`,
+    ].join('\n'),
   )
 }
 

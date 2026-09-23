@@ -1,4 +1,5 @@
 import { EQUATOR_KM, haversineKm } from '../geo/sphere'
+import type { AirportSummary } from './network'
 import type { AirportRef, FlightEntry, FlightsFile } from './types'
 
 /** Average Earth–Moon distance. */
@@ -224,45 +225,38 @@ export function buildFlightLog(file: FlightsFile): FlightLog {
   }
 }
 
-export interface AirportDetail {
-  airport: AirportRef
-  visits: number
-  departures: number
-  arrivals: number
-  firstMonth: string
-  lastMonth: string
-  /** Airports flown to or from here, busiest first. */
-  routes: { other: AirportRef; count: number; km: number }[]
-  airlines: Tally<{ code: string; name: string }>[]
-}
-
 /** Everything the airport card needs, derived from the chronological flight list. */
-export function airportDetail(log: FlightLog, iata: string): AirportDetail | null {
+export function airportDetail(log: FlightLog, iata: string): AirportSummary | null {
   const flights = log.flights.filter((f) => f.from === iata || f.to === iata)
   if (flights.length === 0) return null
   const airport = flights[0].from === iata ? flights[0].origin : flights[0].destination
 
-  const routes = new Map<string, { other: AirportRef; count: number; km: number }>()
+  const destinations = new Map<string, { other: AirportRef; count: number; km: number }>()
   for (const f of flights) {
     const other = f.from === iata ? f.destination : f.origin
     if (other.iata === iata) continue
-    const route = routes.get(other.iata)
+    const route = destinations.get(other.iata)
     if (route) route.count++
-    else routes.set(other.iata, { other, count: 1, km: f.km })
+    else destinations.set(other.iata, { other, count: 1, km: f.km })
   }
   const byCode = new Map(log.airlines.map((a) => [a.item.code, a.item]))
+  const airlines = tally(
+    flights.map((f) => byCode.get(f.airline) ?? { code: f.airline, name: f.airline }),
+    (a) => a.code,
+  ).map((t) => ({ ...t.item, count: t.count }))
 
   return {
     airport,
-    visits: flights.length,
-    departures: flights.filter((f) => f.from === iata).length,
-    arrivals: flights.filter((f) => f.to === iata).length,
-    firstMonth: flights[0].month,
-    lastMonth: flights[flights.length - 1].month,
-    routes: [...routes.values()].sort((a, b) => b.count - a.count || a.other.iata.localeCompare(b.other.iata)),
-    airlines: tally(
-      flights.map((f) => byCode.get(f.airline) ?? { code: f.airline, name: f.airline }),
-      (a) => a.code,
+    destinations: [...destinations.values()].sort(
+      (a, b) => b.count - a.count || a.other.iata.localeCompare(b.other.iata),
     ),
+    stats: {
+      visits: flights.length,
+      departures: flights.filter((f) => f.from === iata).length,
+      arrivals: flights.filter((f) => f.to === iata).length,
+      firstMonth: flights[0].month,
+      lastMonth: flights[flights.length - 1].month,
+      airlines,
+    },
   }
 }

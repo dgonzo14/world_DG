@@ -8,7 +8,8 @@ import StatsPanel from './components/StatsPanel'
 import type { CameraTarget, Mode } from './components/GlobeView'
 import { HOME } from './data/home'
 import visitedCountries from './data/visitedCountries'
-import { airportDetail, type AirportDetail } from './flights/log'
+import { airportDetail } from './flights/log'
+import { networkAirport, type AirportSummary } from './flights/network'
 import type { Atlas, Country } from './geo/atlas'
 import { useAtlas } from './hooks/useAtlas'
 import { useElementSize } from './hooks/useElementSize'
@@ -44,9 +45,9 @@ function cameraFor(country: Country): CameraTarget {
   return { ...country.center, altitude }
 }
 
-function cameraForAirport(detail: AirportDetail): CameraTarget {
+function cameraForAirport(detail: AirportSummary): CameraTarget {
   // Pull back far enough to show the airport's longest route.
-  const longest = Math.max(...detail.routes.map((r) => r.km), 0)
+  const longest = Math.max(...detail.destinations.map((d) => d.km), 0)
   const altitude = Math.min(2.6, Math.max(1.2, 0.9 + longest / 9000))
   return { lat: detail.airport.lat, lng: detail.airport.lng, altitude }
 }
@@ -110,6 +111,8 @@ function TopBar({ atlas }: { atlas: Atlas | null }) {
 function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
   const [selection, setSelection] = useHashSelection()
   const flightsState = useFlights()
+  // The public network is always there; the detailed log only once unlocked.
+  const network = flightsState?.network ?? null
   const flightLog = flightsState?.log ?? null
   const [mode, setMode] = useState<Mode>(() => (initialView() === 'flights' ? 'flights' : 'loop'))
   const [tab, setTab] = useState<Tab>(() => (initialView() === 'flights' ? 'flights' : 'countries'))
@@ -128,16 +131,23 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
   const stops = atlas.visited
 
   // Airports, busiest first: the order for prev/next stepping.
-  const airportRanking = useMemo(() => flightLog?.airports.map((a) => a.item.iata) ?? [], [flightLog])
+  // Prev/next order: by visits when unlocked, by number of routes otherwise.
+  const airportRanking = useMemo(
+    () => (flightLog ? flightLog.airports.map((a) => a.item.iata) : (network?.airports ?? []).map((a) => a.iata)),
+    [flightLog, network],
+  )
   const selectedAirport =
     selection?.type === 'airport' && airportRanking.includes(selection.code) ? selection.code : null
   const airportInfo = useMemo(
-    () => (flightLog && selectedAirport ? airportDetail(flightLog, selectedAirport) : null),
-    [flightLog, selectedAirport],
+    () => {
+      if (!selectedAirport || !network) return null
+      return flightLog ? airportDetail(flightLog, selectedAirport) : networkAirport(network, selectedAirport)
+    },
+    [flightLog, network, selectedAirport],
   )
   // Selecting an airport (including from a shared link) implies the flights view.
-  const inFlights = flightLog !== null && (mode === 'flights' || selectedAirport !== null)
-  const tabs = TABS.filter((t) => t.id !== 'flights' || flightLog)
+  const inFlights = network !== null && (mode === 'flights' || selectedAirport !== null)
+  const tabs = TABS.filter((t) => t.id !== 'flights' || network)
 
   const camera = useMemo<CameraTarget | null>(() => {
     if (airportInfo) return cameraForAirport(airportInfo)
@@ -259,11 +269,12 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
         if (tour) stopTour()
         else if (replay) setReplay(null)
         else select(null)
-      } else if (key === 'f' && flightLog) {
+      } else if (key === 'f' && network) {
         switchMode(mode === 'flights' ? 'loop' : 'flights')
       } else if (key === 't') {
         if (inFlights) {
-          if (replay) setReplay({ ...replay, playing: !replay.playing })
+          if (!flightLog) setTab('flights')
+          else if (replay) setReplay({ ...replay, playing: !replay.playing })
           else startReplay()
         } else if (tour) setTour({ ...tour, playing: !tour.playing })
         else startTour()
@@ -294,6 +305,7 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
               <Suspense fallback={<div className="loader"><span className="loader__orb" aria-hidden="true" />Loading 3D globe…</div>}>
                 <GlobeView
                   atlas={atlas}
+                  network={network}
                   flightLog={flightLog}
                   mode={inFlights ? 'flights' : 'loop'}
                   width={globeSize.width}
@@ -319,7 +331,20 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
         </div>
 
         <div className={`hud hud--title ${tour || replay || selected || selectedAirport ? 'is-dim' : ''}`}>
-          {inFlights ? (
+          {inFlights && !flightLog ? (
+            <>
+              <p className="eyebrow">Flight network</p>
+              <h1>
+                {network.totals.airports} airports.
+                <br />
+                {network.totals.routes} routes.
+              </h1>
+              <p className="hud__sub">
+                Every route in my flight log, across {network.totals.countries} countries. Select an airport to see
+                where it connects.
+              </p>
+            </>
+          ) : inFlights && flightLog ? (
             <>
               <p className="eyebrow">
                 Flight log · {formatMonth(flightLog.first)} – {formatMonth(flightLog.through)}
@@ -409,7 +434,7 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
           </div>
         ) : (
           <div className="hud hud--controls">
-            {flightLog && (
+            {network && (
               <div className="segmented" role="group" aria-label="Globe mode">
                 <button type="button" aria-pressed={!inFlights} onClick={() => switchMode('loop')}>
                   Loop
@@ -419,9 +444,13 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
                 </button>
               </div>
             )}
-            {inFlights ? (
+            {inFlights && flightLog ? (
               <button type="button" className="btn btn--signal" onClick={startReplay}>
                 ▶ Replay {flightLog.months.length} months <kbd>T</kbd>
+              </button>
+            ) : inFlights ? (
+              <button type="button" className="btn btn--signal" onClick={() => setTab('flights')}>
+                Unlock details
               </button>
             ) : (
               <button type="button" className="btn btn--signal" onClick={startTour}>
@@ -480,6 +509,7 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
           <CountryCard
             atlas={atlas}
             country={selected}
+            network={network}
             flightLog={flightLog}
             onSelectAirport={(iata) => selectAirport(iata)}
             onPrev={() => step(-1)}
@@ -514,9 +544,15 @@ function Explorer({ atlas, fetchMs }: { atlas: Atlas; fetchMs: number }) {
           {tab === 'countries' && (
             <CountryList atlas={atlas} selectedCode={code} onSelect={(c) => select(c)} searchRef={searchRef} />
           )}
-          {tab === 'flights' && flightLog && (
+          {tab === 'flights' && flightsState && (
             <FlightsPanel
+              network={flightsState.network}
               log={flightLog}
+              onUnlock={flightsState.unlock}
+              onLock={() => {
+                setReplay(null)
+                flightsState.lock()
+              }}
               replayMonth={replayFlight?.month ?? null}
               selectedAirport={selectedAirport}
               onSelectAirport={(iata) => selectAirport(iata)}

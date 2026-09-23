@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { aircraftFamily, airportDetail, buildFlightLog, monthRange } from './log'
 import type { FlightEntry, FlightsFile } from './types'
@@ -111,12 +110,12 @@ describe('air returns (from === to)', () => {
 
   it('counts its airport once, not twice', () => {
     expect(log.airports.find((a) => a.item.iata === 'ATL')?.count).toBe(5)
-    expect(airportDetail(log, 'ATL')?.visits).toBe(5)
+    expect(airportDetail(log, 'ATL')?.stats?.visits).toBe(5)
   })
 
   it('never wins the shortest-hop record', () => {
     expect(log.records?.shortest.km).toBeGreaterThan(0)
-    expect(airportDetail(log, 'ATL')?.routes.map((r) => r.other.iata)).not.toContain('ATL')
+    expect(airportDetail(log, 'ATL')?.destinations.map((r) => r.other.iata)).not.toContain('ATL')
   })
 })
 
@@ -125,52 +124,23 @@ describe('airportDetail', () => {
 
   it('counts departures, arrivals and visits separately', () => {
     const atl = airportDetail(log, 'ATL')!
-    expect(atl).toMatchObject({ visits: 4, departures: 3, arrivals: 1, firstMonth: '2024-01', lastMonth: '2024-04' })
+    expect(atl.stats).toMatchObject({ visits: 4, departures: 3, arrivals: 1, firstMonth: '2024-01', lastMonth: '2024-04' })
   })
 
   it('groups routes by the other airport, busiest first, both directions together', () => {
     const atl = airportDetail(log, 'ATL')!
-    expect(atl.routes.map((r) => [r.other.iata, r.count])).toEqual([
+    expect(atl.destinations.map((r) => [r.other.iata, r.count])).toEqual([
       ['RDU', 3],
       ['HND', 1],
     ])
   })
 
   it('lists airlines, resolving names and keeping unknown codes', () => {
-    const names = airportDetail(log, 'ATL')!.airlines.map((a) => a.item.name)
+    const names = airportDetail(log, 'ATL')!.stats!.airlines.map((a) => a.name)
     expect(names).toEqual(['Delta Air Lines', 'XXX'])
   })
 
   it('returns null for an airport with no flights', () => {
     expect(airportDetail(log, 'LAX')).toBeNull()
-  })
-})
-
-// Generated locally by `npm run import:flights`; not committed. Skip when absent.
-const FLIGHTS_JSON = new URL('../../public/data/flights.json', import.meta.url)
-
-describe.skipIf(!existsSync(FLIGHTS_JSON))('published flights.json', () => {
-  const file = (existsSync(FLIGHTS_JSON) ? JSON.parse(readFileSync(FLIGHTS_JSON, 'utf8')) : { flights: [], airports: {} }) as FlightsFile
-
-  it('contains only the documented, non-identifying fields', () => {
-    const allowed = ['month', 'from', 'to', 'airline', 'aircraft', 'blockMin', 'arrDelayMin'].sort()
-    for (const f of file.flights) expect(Object.keys(f).sort()).toEqual(allowed)
-  })
-
-  it('stores dates at month precision only', () => {
-    for (const f of file.flights) expect(f.month).toMatch(/^\d{4}-\d{2}$/)
-  })
-
-  it('has coordinates for every airport it references', () => {
-    for (const f of file.flights) {
-      expect(file.airports[f.from]).toBeDefined()
-      expect(file.airports[f.to]).toBeDefined()
-    }
-  })
-
-  it('is chronological and has plausible block times', () => {
-    const months = file.flights.map((f) => f.month)
-    expect(months).toEqual([...months].sort())
-    for (const f of file.flights) if (f.blockMin !== null) expect(f.blockMin).toBeGreaterThan(20)
   })
 })
