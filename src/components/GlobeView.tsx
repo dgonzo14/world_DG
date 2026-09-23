@@ -327,6 +327,22 @@ export default function GlobeView({
     }
   }, [onSelectAirport, log, limit, selectedAirport, connected, topAirports, airportPoints])
 
+  /** IATA of the visible marker whose dot is closest to a screen point, within a fingertip. */
+  const nearestMarker = useCallback((x: number, y: number) => {
+    let best: string | null = null
+    let bestDistance = 26
+    for (const [iata, el] of elements.current) {
+      if (!el.isConnected || el.classList.contains('is-behind')) continue
+      const r = el.getBoundingClientRect()
+      const distance = Math.hypot(r.left + r.width / 2 - x, r.top + r.height / 2 - y)
+      if (distance < bestDistance) {
+        best = iata
+        bestDistance = distance
+      }
+    }
+    return best
+  }, [])
+
   const airportElement = useCallback((obj: object) => {
     const p = obj as AirportPoint
     let el = elements.current.get(p.iata)
@@ -343,17 +359,27 @@ export default function GlobeView({
         `<span class="ap__tag">${p.iata}</span>` +
         `<span class="ap__tip"><b>${p.iata} · ${escapeHtml(p.city)}</b>` +
         `<span class="ap__name">${escapeHtml(p.name)}</span><span class="ap__count"></span></span>`
+      el.dataset.iata = p.iata
       el.addEventListener('click', (event) => {
         event.stopPropagation()
-        onSelectAirportRef.current(p.iata)
+        // Finger-sized targets overlap in dense clusters, so a tap goes to the
+        // closest dot rather than whichever overlapping target is drawn on top.
+        // Clicks synthesized from taps don't reliably report pointerType, so also
+        // check whether the primary pointer is coarse (a touch screen).
+        const touch = (event as PointerEvent).pointerType === 'touch' || matchMedia('(pointer: coarse)').matches
+        onSelectAirportRef.current((touch && nearestMarker(event.clientX, event.clientY)) || p.iata)
       })
-      // Don't let the globe raycast "through" the marker and hover the country below.
-      el.addEventListener('pointermove', (event) => event.stopPropagation())
+      // Keep pointer events on the marker. Otherwise the globe also sees them: it
+      // hovers the country underneath, treats a tap as a click on that country,
+      // and its orbit controls cancel the tap's click event on touch screens.
+      for (const type of ['pointerdown', 'pointerup', 'pointermove', 'touchstart'] as const) {
+        el.addEventListener(type, (event) => event.stopPropagation(), { passive: true })
+      }
       elements.current.set(p.iata, el)
     }
     applyRef.current(el, p)
     return el
-  }, [])
+  }, [nearestMarker])
 
   // --- Camera & controls -------------------------------------------------------
   useEffect(() => {

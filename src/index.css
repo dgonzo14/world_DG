@@ -1107,6 +1107,21 @@ kbd {
 .globe-canvas:has(.ap:hover) .float-tooltip-kap {
   display: none !important;
 }
+/* Touch screens: no hover, so give fingers a 44 px target and show the
+   selected airport's details on the marker itself after a tap. */
+@media (pointer: coarse) {
+  .ap {
+    width: max(44px, calc(var(--size) + 14px));
+    height: max(44px, calc(var(--size) + 14px));
+  }
+  .ap.is-selected .ap__tip {
+    display: grid;
+  }
+  .ap.is-selected .ap__tag,
+  .ap:hover:not(.is-selected) .ap__tip {
+    display: none;
+  }
+}
 .ap:hover .ap__dot {
   transform: scale(1.35);
 }
